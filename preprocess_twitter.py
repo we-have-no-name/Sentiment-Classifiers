@@ -55,10 +55,3 @@ def tokenize(text):
     text = re_sub(r"([A-Z]){2,}", allcaps)
 
     return text.lower()
-
-def main():
-    text = "I'm TESTING alllll kinds of #hashtags and #HASHTAGS, @mentions and 3000 (http://t.co/dkfjkdf). w/ <3 :) haha!!!!!"
-    tokens = tokenize(text)
-    tokens
-    
-if __name__ == "__main__": main()
