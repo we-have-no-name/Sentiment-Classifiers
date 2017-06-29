@@ -20,7 +20,8 @@ def hashtag(text):
     if hashtag_body.isupper():
         result = " ᐸhashtagᐳ {} ᐸallcapsᐳ ".format(hashtag_body)
     else:
-        result = " ".join([" ᐸhashtagᐳ "] + re.split(r".(?=[A-Z])", hashtag_body, flags=FLAGS))
+        result = " ᐸhashtagᐳ " + re.sub(r"(?=[A-Z])", r" ", hashtag_body, flags=FLAGS)
+    result = re.sub(r"_", " ", result, flags=FLAGS)
     return result
 
 def allcaps(text):

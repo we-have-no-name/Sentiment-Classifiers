@@ -52,7 +52,7 @@ class TweetToWordIndices():
 
 	def split_punctuations(self, txt):
 		'''Splits punctuations from words'''
-		txt = re.sub(r" *([^\w ']|( '|' |^'|'$)) *", r' \1 ', txt)
+		txt = re.sub(r"([^\w ']|([^a-zA-Z]'|'[^a-zA-Z ]|^'|'$))", r' \1 ', txt, flags=re.M)
 		return txt
 
 	def split_emojis(self, txt):
