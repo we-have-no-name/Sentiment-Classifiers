@@ -9,7 +9,7 @@ class NNGraph():
 	def __init__(self, batch_size=None, num_steps=85, use_default_network = False, **kwargs):
 		'''
 		Initialize the graph data and optionally create a graph using the default options
-		batch_size: the size of the input batch to be fed to the graph
+		batch_size: the size of the input batch to be fed to the graph, None: variable size
 		num_steps: the count of the word keys in each input pattern
 		use_default_network: create a graph using the default options
 		vocab_size: the size of the embedding vocabulary
@@ -24,10 +24,9 @@ class NNGraph():
 		self.classes = kwargs.get('classes', 8)
 		if use_default_network: self.default_network()
 
-	def receive_inputs(self, drop_out=0.0, internal_embedding=True, dual_embedding=True, embedding2_dim=12, multi_class_targets=True):
+	def receive_inputs(self, internal_embedding=True, dual_embedding=True, embedding2_dim=12, multi_class_targets=True):
 		'''
 		Add the first layer that receives inputs from the outside
-		drop_out: the ratio to be dropped out from the inputs
 		internal_embedding: receive word keys instead of embeddings and collect the embeddings from the graph's internal word embedding
 		dual_embedding: (only with internal_embedding) add a trainable second embedding to each word
 		embedding2_dim: the dimensionality of the second embedding
@@ -40,6 +39,7 @@ class NNGraph():
 		self.drop_out = drop_out
 		with self.graph.as_default():
 			tf.set_random_seed(0)
+			self.drop_out = tf.constant(0.0)
 			self.use_dropout = tf.constant(True)
 			if internal_embedding:
 				self.embedding = tf.Variable(tf.constant(0, dtype=tf.float32, shape=(self.vocab_size, self.embedding_dim)), trainable=False, name='embedding')
@@ -54,7 +54,6 @@ class NNGraph():
 			else:
 				self.inputs = tf.placeholder(tf.float32, (self.batch_size, self.num_steps, self.embedding_dim))
 			self.inputs_d = tf.nn.dropout(self.inputs, 1-self.drop_out)
-			self.inputs_c = tf.cond(self.use_dropout, lambda: self.inputs_d, lambda: self.inputs)
 			if multi_class_targets:
 				self.targets_mc =  tf.placeholder(tf.float32, (self.batch_size, self.classes))
 			else:
@@ -78,7 +77,7 @@ class NNGraph():
 				else: self.cell = rnn.GRUCell(self.num_units, activation=gru_act)
 			if num_layers>1:
 				self.cell = tf.contrib.rnn.MultiRNNCell([self.cell] * self.num_layers)
-			self.all_outputs, self.final_states = tf.nn.dynamic_rnn(self.cell, self.inputs_c, dtype=tf.float32)
+			self.all_outputs, self.final_states = tf.nn.dynamic_rnn(self.cell, self.inputs_d, dtype=tf.float32)
 			self.outputs = self.all_outputs[:,-1]
 			
 			self.softmax_w = tf.Variable(tf.random_uniform((self.num_units, self.classes), 0.0001, 0.001))
@@ -101,7 +100,7 @@ class NNGraph():
 		self.pool_params = kwargs.get('pool_params', [[6, 3], [6, 2]])
 		
 		with self.graph.as_default():
-			cnn = self.inputs_c
+			cnn = self.inputs_d
 			self.conv, self.pool=[], []
 			for i in range(max(len(self.conv_params), len(self.pool_params))):
 				if len(self.conv_params)-1 >= i and self.conv_params[i] is not None:
