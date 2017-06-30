@@ -6,7 +6,7 @@ class NNGraph():
 	Neural Network Graph
 	Build a TensorFlow graph that can be used as a neural network for classifying text
 	'''
-	def __init__(self, batch_size=50, num_steps=85, use_default_network = False, **kwargs):
+	def __init__(self, batch_size=None, num_steps=85, use_default_network = False, **kwargs):
 		'''
 		Initialize the graph data and optionally create a graph using the default options
 		batch_size: the size of the input batch to be fed to the graph
@@ -56,9 +56,9 @@ class NNGraph():
 			self.inputs_d = tf.nn.dropout(self.inputs, 1-self.drop_out)
 			self.inputs_c = tf.cond(self.use_dropout, lambda: self.inputs_d, lambda: self.inputs)
 			if multi_class_targets:
-				self.targets_mc =  tf.constant(0.0, tf.float32, (self.batch_size, self.classes))
+				self.targets_mc =  tf.placeholder(tf.float32, (self.batch_size, self.classes))
 			else:
-				self.targets = tf.constant(-1, tf.int32, (self.batch_size,))
+				self.targets = tf.placeholder(tf.int32, (self.batch_size,))
 				self.targets_oh = tf.one_hot(self.targets, self.classes, on_value=1, off_value=0)
 			return True
 
@@ -113,7 +113,7 @@ class NNGraph():
 					cnn = self.pool[-1]
 				else: self.pool.append(None)
 
-			self.flat = tf.reshape(cnn, (self.batch_size, -1))
+			self.flat = tf.reshape(cnn, (-1, cnn.shape[1].value * cnn.shape[2].value))
 			self.dense = tf.layers.dense(inputs=self.flat, units=self.classes, activation=tf.nn.relu)
 			self.cnn_logits = self.dense
 			self.cnn_probs = self.probs = tf.nn.softmax(self.cnn_logits)
