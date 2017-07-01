@@ -36,7 +36,7 @@ class Classifier:
 		self.num_steps = self.graph.num_steps
 		self.classes = self.graph.classes
 		self.sess = tf.Session(graph=self.graph.graph)
-		self.tweet_to_indices = TweetToWordIndices()
+		self.tweet_to_indices = TweetToWordIndices(assumed_max_length=self.num_steps)
 		self.accuracy_analysis = AccuracyAnalysis(classes = self.classes, data_set = self.data_set)
 		
 		if restore_saved_session: self.restore_session()

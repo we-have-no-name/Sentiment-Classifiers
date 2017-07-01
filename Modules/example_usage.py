@@ -35,7 +35,7 @@ def main():
 	classify_thread.start()
 	
 	while(classify_thread.is_alive()):
-		print('waiting:{}, ready:{}\n'.format(incoming_queue.qsize(), ready_queue.qsize()))
+##		print('waiting:{}, ready:{}\n'.format(incoming_queue.qsize(), ready_queue.qsize()))
 		
 		# stopping the stream from any thread
 		if(classified>30):
@@ -48,7 +48,7 @@ def use_ready_queue(ready_queue):
 	global classified; classified+=1
 	tweet = ready_queue.get()
 	probs=', '.join(['{}: {:.3}'.format(sent_map[l], tweet.sentiment[l]) for l in np.argsort(tweet.sentiment)[::-1][:3] if tweet.sentiment[l]>0.01])
-	print('tweet: {}\nprobs: {}\nlocation: {}\n'.format(tweet.text, probs, tweet.location).translate(non_bmp_map))
+	print('tweet: {}\nprobs: {}\ncountry: {}\nlocation: {}\n'.format(tweet.text, probs, tweet.country, tweet.location).translate(non_bmp_map))
 	
 
 if __name__ == '__main__': main()
