@@ -6,7 +6,7 @@ class NNGraph():
 	Neural Network Graph
 	Build a TensorFlow graph that can be used as a neural network for classifying text
 	'''
-	def __init__(self, batch_size=None, num_steps=85, use_default_network = False, **kwargs):
+	def __init__(self, batch_size=None, num_steps=90, use_default_network = False, **kwargs):
 		'''
 		Initialize the graph data and optionally create a graph using the default options
 		batch_size: the size of the input batch to be fed to the graph, None: variable size
@@ -36,13 +36,12 @@ class NNGraph():
 		self.dual_embedding = dual_embedding
 		self.multi_class_targets = multi_class_targets
 		self.embedding2_dim = embedding2_dim
-		self.drop_out = drop_out
 		with self.graph.as_default():
 			tf.set_random_seed(0)
 			self.drop_out = tf.constant(0.0)
-			self.use_dropout = tf.constant(True)
 			if internal_embedding:
 				self.embedding = tf.Variable(tf.constant(0, dtype=tf.float32, shape=(self.vocab_size, self.embedding_dim)), trainable=False, name='embedding')
+				self.embedding_saver = tf.train.Saver({'embedding': self.embedding})
 				self.inputs_keys = tf.placeholder(tf.int32, (self.batch_size, self.num_steps))
 				if dual_embedding:
 					self.inputs_p1 = tf.gather(self.embedding, self.inputs_keys)
@@ -171,6 +170,8 @@ class NNGraph():
 			self.losses=tf.reduce_sum(tf.square(tf.nn.relu(tf.subtract(self.targets_mc, self.probs))))
 			self.opt = tf.train.AdamOptimizer()
 			self.opt_op = self.opt.minimize(self.losses)
+			self.global_variables_initializer = tf.global_variables_initializer()
+			self.train_saver = tf.train.Saver()
 		return True
 
 	def default_network(self):

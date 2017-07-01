@@ -18,7 +18,7 @@ class TweetToWordIndices():
 		And emoji are split from each other and replaced with special tags available for emotions in the vocabulary
 	After preprocessing each word is replaced with its word index from the embedding dictionary
 	'''
-	def __init__(self, embedding_dim=200, vocab_size=int(1.2e6), assumed_max_length=85, user_config_filename='config.json'):
+	def __init__(self, embedding_dim=200, vocab_size=int(1.2e6), assumed_max_length=90, user_config_filename='config.json'):
 		'''Read the embedding dictionaries'''
 		try:
 			json_config_file = open(user_config_filename)
