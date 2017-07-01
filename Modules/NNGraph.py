@@ -24,50 +24,51 @@ class NNGraph():
 		self.classes = kwargs.get('classes', 8)
 		if use_default_network: self.default_network()
 
-	def receive_inputs(self, internal_embedding=True, dual_embedding=True, embedding2_dim=12, multi_class_targets=True):
+	def receive_inputs(self, internal_embedding=True, embedding2_dim=12, multi_class_targets=True):
 		'''
 		Add the first layer that receives inputs from the outside
 		internal_embedding: receive word keys instead of embeddings and collect the embeddings from the graph's internal word embedding
-		dual_embedding: (only with internal_embedding) add a trainable second embedding to each word
-		embedding2_dim: the dimensionality of the second embedding
+		embedding2_dim: (only with internal_embedding) the dimensionality of the second embedding for each word
 		multi_class_targets: receive probabilies of each target class instead of the index of one top class
 		'''
 		self.internal_embedding = internal_embedding
-		self.dual_embedding = dual_embedding
+		self.dual_embedding = embedding2_dim > 0
 		self.multi_class_targets = multi_class_targets
 		self.embedding2_dim = embedding2_dim
 		with self.graph.as_default():
 			tf.set_random_seed(0)
 			self.drop_out = tf.constant(0.0)
-			if internal_embedding:
+			if self.internal_embedding:
 				self.embedding = tf.Variable(tf.constant(0, dtype=tf.float32, shape=(self.vocab_size, self.embedding_dim)), trainable=False, name='embedding')
 				self.embedding_saver = tf.train.Saver({'embedding': self.embedding})
 				self.inputs_keys = tf.placeholder(tf.int32, (self.batch_size, self.num_steps))
-				if dual_embedding:
-					self.inputs_p1 = tf.gather(self.embedding, self.inputs_keys)
+				self.inputs = tf.gather(self.embedding, self.inputs_keys)
+				if self.dual_embedding:
 					self.embedding2 = tf.Variable(tf.random_uniform((self.vocab_size, self.embedding2_dim), 0.0001, 0.001))
-					self.inputs_p2 = tf.gather(self.embedding2, self.inputs_keys)
-					self.inputs = tf.concat((self.inputs_p1, self.inputs_p2), axis=2)
-				else:
-					self.inputs = tf.gather(self.embedding, self.inputs_keys)
+					self.inputs_e2 = tf.gather(self.embedding2, self.inputs_keys)
+					self.inputs_de = tf.concat((self.inputs, self.inputs_e2), axis=2)
 			else:
 				self.inputs = tf.placeholder(tf.float32, (self.batch_size, self.num_steps, self.embedding_dim))
 			self.inputs_d = tf.nn.dropout(self.inputs, 1-self.drop_out)
-			if multi_class_targets:
+			self.inputs_de_d = tf.nn.dropout(self.inputs_de, 1-self.drop_out)
+			if self.multi_class_targets:
 				self.targets_mc =  tf.placeholder(tf.float32, (self.batch_size, self.classes))
 			else:
 				self.targets = tf.placeholder(tf.int32, (self.batch_size,))
 				self.targets_oh = tf.one_hot(self.targets, self.classes, on_value=1, off_value=0)
 			return True
 
-	def rnn(self, num_units=200, num_layers=1, cell_type='gru', gru_act=None):
+	def rnn(self, num_units=200, num_layers=1, cell_type='gru', dual_embedding=False, gru_act=None):
 		'''
 		Build a multi layer RNN
 		cell_type: 'gru' or 'lstm'
 		gru_act: activation function for the gru cell, None: default (tanh)
+		dual_embedding: use dual embedding from inputs
 		'''
 		self.num_units = num_units
 		self.num_layers = num_layers
+		if self.dual_embedding and dual_embedding: inputs_d = self.inputs_de_d
+		else: inputs_d = self.inputs_d
 		with self.graph.as_default():
 			if cell_type == 'lstm':
 				self.cell = rnn.BasicLSTMCell(self.num_units)
@@ -76,7 +77,7 @@ class NNGraph():
 				else: self.cell = rnn.GRUCell(self.num_units, activation=gru_act)
 			if num_layers>1:
 				self.cell = tf.contrib.rnn.MultiRNNCell([self.cell] * self.num_layers)
-			self.all_outputs, self.final_states = tf.nn.dynamic_rnn(self.cell, self.inputs_d, dtype=tf.float32)
+			self.all_outputs, self.final_states = tf.nn.dynamic_rnn(self.cell, inputs_d, dtype=tf.float32)
 			self.outputs = self.all_outputs[:,-1]
 			
 			self.softmax_w = tf.Variable(tf.random_uniform((self.num_units, self.classes), 0.0001, 0.001))
@@ -86,7 +87,7 @@ class NNGraph():
 			self.rnn_probs = self.probs = tf.nn.softmax(self.rnn_logits)
 		return True
 		
-	def cnn(self, concat_axis=2, **kwargs):
+	def cnn(self, concat_axis=2, dual_embedding=True, **kwargs):
 		'''
 		Build a multi layer, multi filter CNN
 		conv_params: 3D list of shape [layers, filters, filter_params]
@@ -94,12 +95,15 @@ class NNGraph():
 		pool_params: 2D list of shape [layers, pool_params]
 			pool_params: [pool_size, strides]
 		use None to skip a layer
+		dual_embedding: use dual embedding from inputs
 		'''
 		self.conv_params = kwargs.get('conv_params', [[[100, 1], [100, 2], [50, 7]], [[self.embedding_dim, 2]]])
 		self.pool_params = kwargs.get('pool_params', [[6, 3], [6, 2]])
+		if self.dual_embedding and dual_embedding: inputs_d = self.inputs_de_d
+		else: inputs_d = self.inputs_d
 		
 		with self.graph.as_default():
-			cnn = self.inputs_d
+			cnn = inputs_d
 			self.conv, self.pool=[], []
 			for i in range(max(len(self.conv_params), len(self.pool_params))):
 				if len(self.conv_params)-1 >= i and self.conv_params[i] is not None:
@@ -184,7 +188,8 @@ class NNGraph():
 
 		# CNN
 		## CNN1
-		self.cnn()
+##		self.cnn()
+		
 ##		## CNN1.0.1
 ##		self.cnn(conv_params=[[[100, 1], [100, 2], [50, 7]], [[100, 1], [100, 2], [50, 7]]], pool_params=[[2, 2], [3, 3]])
 ##		## CNN1.0.2
@@ -201,6 +206,7 @@ class NNGraph():
 ##		self.cnn(conv_params=[[[200, 2]], [[200, 2]], [[200, 2]], [[200, 2]], [[200, 2]]], pool_params=[[2, 2], [2, 2], [2, 2], [2, 2], [-1, 1]], concat_axis=1)
 
 		# Merge RNN and CNN
-		self.merge_rnn_cnn(0.65)
+##		self.merge_rnn_cnn(0.65)
+		
 		self.training()
 		return True

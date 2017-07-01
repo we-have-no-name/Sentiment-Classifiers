@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 from TweetToWordIndices import TweetToWordIndices
-from AccuracyAnalysis import AccuracyAnalysis
+from AccuracyAnalysis import AccuracyAnalysis, TrainStats
 from NNGraph import NNGraph
 from DataSetReader import DataSetReader
 import os, time
@@ -37,7 +37,8 @@ class Classifier:
 		self.classes = self.graph.classes
 		self.sess = tf.Session(graph=self.graph.graph)
 		self.tweet_to_indices = TweetToWordIndices(assumed_max_length=self.num_steps)
-		self.accuracy_analysis = AccuracyAnalysis(classes = self.classes, data_set = self.data_set)
+		self.train_stats = TrainStats()
+		self.accuracy_analysis = AccuracyAnalysis(train_stats=self.train_stats, classes = self.classes, data_set = self.data_set)
 		
 		if restore_saved_session: self.restore_session()
 		else: self.init_session()
@@ -68,7 +69,7 @@ class Classifier:
 		self.graph.embedding_saver.restore(self.sess, os.path.join(self.data_path, "d"+ str(self.graph.embedding_dim) + "_word_embedding", "TF_Variables", "Embedding"))
 		return True
 		
-	def train(self, inputs=None, targets=None, iters=100, batch_size=50, max_train=None, max_test=None, **kwargs):
+	def train(self, iters=100, inputs=None, targets=None, batch_size=50, max_train=None, max_test=None, **kwargs):
 		'''
 		Trains the classifier (can be called multiple times and after a session is restored)
 		args:
@@ -86,8 +87,8 @@ class Classifier:
 		if max_train is None: max_train=int(inputs_count*0.8)
 		if max_test is None: max_test=int(inputs_count*0.2)
 		drop_out = kwargs.get('drop_out', 0.0)
+		print_stats = kwargs.get('print_stats', False)
 		checkpoint_distance = kwargs.get('checkpoint_distance', 5)
-		start_time = time.time()
 		
 		iter_train_probs = np.zeros((max_train, self.classes))
 		
@@ -95,7 +96,8 @@ class Classifier:
 		for i in range(len(inputs)):
 			inputs_keys[i] = self.tweet_to_indices.tweet_to_word_indices(inputs[i])
 		
-			
+		train_time0 = self.train_stats.train_time
+		start_time = time.time();
 		for i in range(iters):
 			checkpoint = None
 			if (i+1)%checkpoint_distance == 0: checkpoint = (i+1)//checkpoint_distance 
@@ -113,19 +115,25 @@ class Classifier:
 					_, np_probs = self.sess.run([self.graph.opt_op, self.graph.probs], feed_dict={self.graph.inputs_keys: np_inputs_keys, self.graph.targets_mc: np_targets, self.graph.drop_out:drop_out})
 					iter_train_probs[batch_start:batch_end] = np_probs
 				else:
-##					_ = self.sess.run([self.graph.opt_op], feed_dict={inputs: np_inputs, targets_mc: np_targets})
-					_ = self.sess.run([self.graph.opt_op], feed_dict={inputs_keys: np_inputs_keys, targets_mc: np_targets})
-
+##					_ = self.sess.run([self.graph.opt_op], feed_dict={self.graph.inputs: np_inputs, self.graph.targets_mc: np_targets})
+					_ = self.sess.run([self.graph.opt_op], feed_dict={self.graph.inputs_keys: np_inputs_keys, self.graph.targets_mc: np_targets})
+			self.train_stats.train_iters += 1
+			
 			if checkpoint is None: continue
 
 			# Get test results
 ##			np_test_inputs = inputs_embedded[max_train:: max_train+max_test, :self.graph.num_steps]
 			np_test_inputs_keys = inputs_keys[max_train: max_train+max_test, :self.graph.num_steps]
 			np_test_targets = targets[max_train: max_train+max_test]
-##			np_test_probs, = sess.run([self.graph.probs], feed_dict={self.graph.inputs:  np_test_inputs, self.graph.targets_mc: np_test_targets})
-			iter_test_probs, = self.sess.run([self.graph.probs], feed_dict={self.graph.inputs_keys:  np_test_inputs_keys, self.graph.targets_mc: np_test_targets})
+##			np_test_probs, = sess.run([self.graph.probs], feed_dict={self.graph.inputs:  np_test_inputs})
+			iter_test_probs, = self.sess.run([self.graph.probs], feed_dict={self.graph.inputs_keys:  np_test_inputs_keys})
 
-			self.test_acc, self.max_test_acc = self.accuracy_analysis.add_probs(iter_train_probs, iter_test_probs, i=i)
+			end_time = time.time()
+			eta = (end_time - start_time)*(iters-i-1)/(i+1)
+			self.train_stats.train_time = train_time0 + end_time-start_time
+			self.test_acc, self.max_test_acc = self.accuracy_analysis.add_probs(iter_train_probs, iter_test_probs)
+			if print_stats: print('{}\nETA {}\n'.format(self.accuracy_analysis.statistics, self.accuracy_analysis.sec2clock(eta)))
+			
 		return self.test_acc, self.max_test_acc
 			
 
@@ -158,6 +166,18 @@ class Classifier:
 ##		output_probs, = self.sess.run([self.graph.probs], feed_dict={self.graph.inputs: inputs})
 		output_probs, = self.sess.run([self.graph.probs], feed_dict={self.graph.inputs_keys: np_inputs_keys})
 		return output_probs
-  
 
+def main():
+	'''
+	Train the classifier if the file is run as a script
+	'''
+	print("Training\n")
+	c=Classifier(restore_saved_session=False)
+	c.train(100, print_stats=True)
+	save = input("Save session? (y, n) [y]:")
+	if save == '' or save == 'y':
+		c.save_session()
+		print("Session saved")
+	print("Done")
 
+if __name__ == '__main__': main()

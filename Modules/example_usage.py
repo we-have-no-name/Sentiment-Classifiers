@@ -1,3 +1,32 @@
+'''
+An example of the usage of the TwitterAgent and the ClassifierInterface
+
+Runs the TwitterAgent to get a stream of tweets and the ClassifierInterface to classify them
+
+Requirements:
+a config.json file of shape
+{
+	"data_path": "",
+	
+	"consumer_key": "",
+	"consumer_secret": "",
+
+	"access_token": "",
+	"access_token_secret": ""
+}
+
+the data_path folder should have the following
+1. folder d200_word_embedding
+> can be created by extracting the files in the glove file from http://nlp.stanford.edu/data/glove.twitter.27B.zip
+into a folder named glove.twitter.27B in the data_path folder
+> then running Word_Embeddding_Glove_Saver().run() and choosing embedding dim = 200
+2. folder Sessions/DefaultSession having a checkpoint of a trained session
+or
+3. folder DataSet with the DataSet's csv files each row of shape [link, tweet, label1, label2, label3]
+	with labels ranging from 0:7
+> then to train a session
+	run Classifier.py as a script
+'''
 from ClassifierInterface import ClassifierInterface, IncomingQueue
 from TwitterAgent import TwitterAgent
 
@@ -10,6 +39,9 @@ non_bmp_map = dict.fromkeys(range(0x10000, sys.maxunicode + 1), 0xfffd)
 
 classified = 0
 def main():
+	'''
+	Runs two threads, one to receive a tweets stream and another to classify them.
+	'''
 	ta = TwitterAgent()
 	incoming_queue = IncomingQueue()
 	c = ClassifierInterface(incoming_queue)
@@ -45,6 +77,9 @@ def main():
 # An example usage of the classified tweets
 sent_map=['Happy','Love','Hopeful','Neutral','Angry','Hopeless','Hate','Sad']
 def use_ready_queue(ready_queue):
+	'''
+	Prints the classified tweets.
+	'''
 	global classified; classified+=1
 	tweet = ready_queue.get()
 	probs=', '.join(['{}: {:.3}'.format(sent_map[l], tweet.sentiment[l]) for l in np.argsort(tweet.sentiment)[::-1][:3] if tweet.sentiment[l]>0.01])
@@ -52,32 +87,3 @@ def use_ready_queue(ready_queue):
 	
 
 if __name__ == '__main__': main()
-
-
-'''
-Requirements
-a config.json file of shape
-{
-	"data_path": "",
-	
-	"consumer_key": "",
-	"consumer_secret": "",
-
-	"access_token": "",
-	"access_token_secret": ""
-}
-
-the data_path folder should have the following
-1. folder d200_word_embedding
-1.1. can be created by extracting the files in the glove file from http://nlp.stanford.edu/data/glove.twitter.27B.zip
-into a folder named glove.twitter.27B in the data_path folder
-1.2. then running Word_Embeddding_Glove_Saver().run() and choosing embedding dim = 200
-2.1. folder Sessions/DefaultSession having a checkpoint of a trained session
-or
-2.2. folder DataSet with the DataSet's csv files each row of shape link, tweet, label1, label2, label3
-	with labels ranging from 0:7
-2.2.1. then to train a session
-	a. run Classifier()
-	b. then Classifier.train()
-	c. then Classifier.save_session()
-'''
