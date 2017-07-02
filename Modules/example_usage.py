@@ -49,7 +49,7 @@ def main():
 	max_tweets=[30] #use -1 for an unlimited stream
 	def stream_task(q):
 		# receive a sample of the global tweets stream
-		ta.get_sample_tweets_stream(max_tweets=max_tweets, data_handler=q, lang='en', save_to_files=True)
+		ta.get_sample_tweets_stream(max_tweets=max_tweets, data_handler=q, lang='en', save_to_files=False)
 
 	def classify_task():
 		while(True):
