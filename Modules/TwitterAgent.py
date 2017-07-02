@@ -8,9 +8,8 @@ import os
 
 class StreamDataStorage():
 	'''stores json tweet strings to files'''
-	def __init__(self, file_name, lang='', add_timestamp=True):
+	def __init__(self, file_name, add_timestamp=True):
 		'''open the files needed for storage'''
-		self.lang=lang
 		ts=' - ' + datetime.utcnow().strftime('%Y%m%dT%H%M%S') if add_timestamp else ''
 		clean_file_name = file_name + ts + '.csv'
 		file_name += ts + '.txt'
@@ -23,7 +22,6 @@ class StreamDataStorage():
 		'''receives a json tweet string and write it to the files'''
 		tweet_json=json.loads(data)
 		try:
-			if self.lang!='' and tweet_json['lang']!=self.lang: return False
 			link='www.twitter.com/' + tweet_json['user']['screen_name'] + '/status/' + str(tweet_json['id'])
 			if 'retweeted_status' in tweet_json:
 				tweet = "RT @" + tweet_json['retweeted_status']['user']['screen_name'] + ": " + tweet_json['retweeted_status']['text']
@@ -38,17 +36,19 @@ class StreamDataStorage():
 
 class StdOutListener(StreamListener):
 	'''specifies how tweet json strings from a tweepy stream are handled'''
-	def __init__(self, max_tweets=[-1], storage_agent=None, data_handler = None, data_list=None):
+	def __init__(self, max_tweets=[-1], lang='', storage_agent=None, data_handler = None, data_list=None):
 		'''sets the object's data handler'''
 		self.count=0
 		self.max_tweets=max_tweets
 		self.storage_agent=storage_agent
 		self.data_handler=data_handler
 		self.data_list=data_list
+		self.lang=lang
 
 	def on_data(self, data):
 		'''accepts a tweet json string and sends it to the available handlers'''
 		no_error = True
+		if self.lang!='' and json.loads(data).get('lang', 'no_lang')!=self.lang: return True
 		if self.storage_agent is not None: no_error=self.storage_agent.write(data)
 		try:
 			if self.data_handler is not None: no_error=no_error and self.data_handler.put(data)
@@ -96,7 +96,7 @@ class TwitterAgent():
 	
 	def make_stream_object(self, file_name,**kwargs):
 		"""initializes a stream and its data handlers."""
-		lang=kwargs.get('lang','en')
+		lang=kwargs.get('lang','')
 		add_timestamp=kwargs.get('add_timestamp',True)
 		max_tweets=kwargs.get('max_tweets',[20])
 		save_to_files=kwargs.get('save_to_files',True)
@@ -105,8 +105,8 @@ class TwitterAgent():
 
 		storage_agent=None
 		if save_to_files:
-			storage_agent = StreamDataStorage(file_name, lang=lang, add_timestamp=add_timestamp)
-		self.std_listener = StdOutListener(max_tweets, storage_agent, data_handler, data_list)
+			storage_agent = StreamDataStorage(file_name, add_timestamp=add_timestamp)
+		self.std_listener = StdOutListener(max_tweets, lang, storage_agent, data_handler, data_list)
 		stream = Stream(self.auth, self.std_listener)
 		return stream
 	

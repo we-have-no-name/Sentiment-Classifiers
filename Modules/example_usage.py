@@ -46,10 +46,10 @@ def main():
 	incoming_queue = IncomingQueue()
 	c = ClassifierInterface(incoming_queue)
 	ready_queue = c.ready_queue
-	max_tweets=[-1]
+	max_tweets=[30] #use -1 for an unlimited stream
 	def stream_task(q):
 		# receive a sample of the global tweets stream
-		ta.get_sample_tweets_stream(max_tweets=max_tweets, data_handler=q, save_to_files=False)
+		ta.get_sample_tweets_stream(max_tweets=max_tweets, data_handler=q, lang='en', save_to_files=True)
 
 	def classify_task():
 		while(True):
@@ -70,7 +70,7 @@ def main():
 ##		print('waiting:{}, ready:{}\n'.format(incoming_queue.qsize(), ready_queue.qsize()))
 		
 		# stopping the stream from any thread
-		if(classified>30):
+		if(False):      # use your condition
 			max_tweets[0]=0
 
 
@@ -80,10 +80,9 @@ def use_ready_queue(ready_queue):
 	'''
 	Prints the classified tweets.
 	'''
-	global classified; classified+=1
 	tweet = ready_queue.get()
 	probs=', '.join(['{}: {:.3}'.format(sent_map[l], tweet.sentiment[l]) for l in np.argsort(tweet.sentiment)[::-1][:3] if tweet.sentiment[l]>0.01])
-	print('tweet: {}\nprobs: {}\ncountry: {}\nlocation: {}\n'.format(tweet.text, probs, tweet.country, tweet.location).translate(non_bmp_map))
+	print('tweet: {}\nprobs: {}\ncountry: {}\nlocation: {}\nlang: {}\n'.format(tweet.text, probs, tweet.country, tweet.location, tweet.lang).translate(non_bmp_map))
 	
 
 if __name__ == '__main__': main()
