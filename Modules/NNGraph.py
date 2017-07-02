@@ -167,14 +167,17 @@ class NNGraph():
 		'''
 		return tf.stack([tf.gather(inputs[i], tf.nn.top_k(tf.reduce_mean(inputs[i], axis=-1), k, sorted=False).indices) for i in range(inputs.shape[0])])
 
-	def merge_rnn_cnn(self, factor):
+	def merge_rnn_cnn(self, ratio, train_ratio=False):
 		'''
 		Merge the network's RNN with its CNN
-		factor: a ratio 0.0:1.0 to be used from RNN probabilities where 1-factor is used for the CNN
+		ratio: a ratio 0.0:1.0 to be used from RNN probabilities where 1-ratio is used for the CNN
+		train_ratio: sets whether the merge ratio should be trained
 		'''
-		self.merge_factor = factor
+		self.merge_ratio = ratio
+		self.train_ratio = train_ratio
 		with self.graph.as_default(), tf.name_scope('merge'):
-			self.probs = factor * self.rnn_probs + (1-factor) * self.cnn_probs
+			self.merge_ratio_variable = tf.clip_by_value(tf.Variable(ratio, trainable = train_ratio), 0, 1)
+			self.probs = self.merge_ratio_variable * self.rnn_probs + (1-self.merge_ratio_variable) * self.cnn_probs
 		self.set_graph_description()
 
 	def training(self, loss_name = 'sse_r'):
@@ -276,9 +279,10 @@ class NNGraph():
 			cnn['dual_embedding'] = self.cnn_dual_embedding
 			description['cnn'] = cnn
 
-		if hasattr(self, 'merge_factor'):
+		if hasattr(self, 'merge_ratio'):
 			merge = dict()
-			merge['factor'] = self.merge_factor
+			merge['ratio'] = self.merge_ratio
+			merge['train_ratio'] = self.train_ratio
 			description['merge'] = merge
 			
 		if hasattr(self, 'loss_name'):

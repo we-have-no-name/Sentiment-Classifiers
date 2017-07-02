@@ -133,6 +133,9 @@ class Classifier:
 			end_time = time.time()
 			eta = (end_time - start_time)*(iters-i-1)/(i+1)
 			self.train_stats.train_time = train_time0 + end_time-start_time
+			if self.graph.description.get('merge', dict()).get('train_ratio', False):
+				merge_ratio, = self.sess.run([self.graph.merge_ratio_variable]); merge_ratio=float(merge_ratio)
+				self.graph.description['merge']['ratio'] = self.graph.merge_ratio = merge_ratio
 			self.test_acc, self.max_test_acc = self.accuracy_analysis.add_probs(iter_train_probs, iter_test_probs)
 			if print_stats: print('{}\nETA {}\n'.format(self.accuracy_analysis.statistics, self.accuracy_analysis.sec2clock(eta)))
 			
@@ -145,7 +148,7 @@ class Classifier:
 		args: use_graph_name: use the name of the graph as a folder name
 		'''
 		session_relative_path = self.checkpoint_name
-		if use_graph_name: session_relative_path = os.path.join(self.train_stats.graph_description['name'], 'saved_session')
+		if use_graph_name: session_relative_path = os.path.join(self.train_stats.graph_description['name'], 'default')
 		save_path = os.path.join(self.data_path, 'Sessions', session_relative_path)
 		save_folder = os.path.dirname(save_path)
 		if not os.path.exists(save_folder): os.makedirs(save_folder)

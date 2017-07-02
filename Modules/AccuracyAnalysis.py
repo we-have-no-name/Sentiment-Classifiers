@@ -90,6 +90,10 @@ class AccuracyAnalysis:
 		args:
 		probs: output probabilities from the classifier
 		targets: target probabilities
+		return:
+		accs_r: accuracies per example per class
+		accs: sum of accuracies per example
+		acc: mean of accuracies of all examples
 		'''
 		accs_r = np.minimum(probs, targets);
 		accs = np.sum(accs_r, 1)
@@ -101,8 +105,11 @@ class AccuracyAnalysis:
 		Calculates max(acc0, acc) for each item
 		This means if the top class is matched, give the full score, else give acc
 		args:
-		probs: output probabilities from the classifier
-		targets: target probabilities
+		accs0: accs0 from method acc0
+		accs: accs from method acc
+		return:
+		accs2: sum of accuracies per example
+		acc2: mean of accuracies of all examples
 		'''
 		accs2 = np.maximum(accs0, accs)
 		acc2 = np.mean(accs2)
@@ -117,8 +124,11 @@ class AccuracyAnalysis:
 		otherwise acc is given
 		and if the top prob matches the top target, the full item score is given
 		args:
-		probs: output probabilities from the classifier
-		targets: target probabilities
+		accs0: accs0 from method acc0
+		accs_r: accs_r from method acc
+		return:
+		accs3: sum of accuracies per example
+		acc3: mean of accuracies of all examples
 		'''
 		accs3 = np.sum(np.maximum(accs_r, np.minimum((probs> 0.5 * targets), targets)), 1)
 		accs3 = np.maximum(accs3, accs0)
@@ -193,8 +203,7 @@ class AccuracyAnalysis:
 		'''
 		Saves a log about the training accuracies and results and graph description
 		'''
-##                log_folder = os.path.join(data_path, 'log', "{}_tr{}te{}_Ru{}l{}do{}d{}+{}_{}".format(iters_label, max_train, max_test, num_units, num_layers, drop_out, embedding_dim, embedding2_dim, session_init_time))
-		log_folder = os.path.join(self.train_stats.data_path, 'log', "{}_{}".format(self.train_stats.graph_description['name'], self.train_stats.session_init_time))
+		log_folder = os.path.join(self.train_stats.data_path, 'log', "{} - {}".format(self.train_stats.graph_description['name'], self.train_stats.session_init_time))
 		if not os.path.exists(log_folder): os.makedirs(log_folder)
 		
 		plot_file_name = os.path.join(log_folder, "plot")
