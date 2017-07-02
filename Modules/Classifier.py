@@ -38,11 +38,13 @@ class Classifier:
 		self.sess = tf.Session(graph=self.graph.graph)
 		self.tweet_to_indices = TweetToWordIndices(assumed_max_length=self.num_steps)
 		self.train_stats = TrainStats()
+		self.train_stats.graph_description = self.graph.description
 		self.accuracy_analysis = AccuracyAnalysis(train_stats=self.train_stats, classes = self.classes, data_set = self.data_set)
 		
 		if restore_saved_session: self.restore_session()
 		else: self.init_session()
-		self.session_init_time = 'UTC'+time.strftime("%y%m%d-%H%M%S", time.gmtime())
+		self.train_stats.session_init_time = 'UTC'+time.strftime("%y%m%d-%H%M%S", time.gmtime())
+		self.train_stats.data_path = self.data_path
 		
 		if kwargs.get('set_note', False)==True: self.accuracy_analysis.set_note();
 		
@@ -137,13 +139,19 @@ class Classifier:
 		return self.test_acc, self.max_test_acc
 			
 
-	def save_session(self):
+	def save_session(self, use_graph_name=True):
 		'''
 		Saves the trained state of the classifier
+		args: use_graph_name: use the name of the graph as a folder name
 		'''
-		save_path = os.path.join(self.data_path, 'Sessions', self.checkpoint_name)
-		if not os.path.exists(os.path.dirname(save_path)): os.makedirs(os.path.dirname(save_path))
-		self.graph.train_saver.save(self.sess, save_path)
+		session_relative_path = self.checkpoint_name
+		if use_graph_name: session_relative_path = os.path.join(self.train_stats.graph_description['name'], 'saved_session')
+		save_path = os.path.join(self.data_path, 'Sessions', session_relative_path)
+		save_folder = os.path.dirname(save_path)
+		if not os.path.exists(save_folder): os.makedirs(save_folder)
+		save_path = self.graph.train_saver.save(self.sess, save_path)
+		self.accuracy_analysis.sess_save_path = save_path
+		with open(os.path.join(save_folder, "graph_description.txt"), 'w') as log_file: log_file.write(json.dumps(self.train_stats.graph_description, indent=4, sort_keys=True))
 		return True
 	
 	def restore_session(self):
@@ -167,16 +175,19 @@ class Classifier:
 		output_probs, = self.sess.run([self.graph.probs], feed_dict={self.graph.inputs_keys: np_inputs_keys})
 		return output_probs
 
-def main():
+def main(graph = None, iters = 100):
 	'''
 	Train the classifier if the file is run as a script
+	graph: an instance of NNGraph
+	iters: train iterations
 	'''
 	print("Training\n")
-	c=Classifier(restore_saved_session=False)
-	c.train(100, print_stats=True)
+	global c
+	c=Classifier(graph, restore_saved_session=False)
+	c.train(iters, print_stats=True)
 	save = input("Save session? (y, n) [y]:")
 	if save == '' or save == 'y':
-		c.save_session()
+		c.save_session(use_graph_name=False)
 		print("Session saved")
 	print("Done")
 

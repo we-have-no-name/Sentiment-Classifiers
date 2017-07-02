@@ -22,7 +22,10 @@ class NNGraph():
 		self.vocab_size = kwargs.get('vocab_size', int(1.2e6))
 		self.embedding_dim = kwargs.get('embedding_dim', 200)
 		self.classes = kwargs.get('classes', 8)
-		if use_default_network: self.default_network()
+		self.name = kwargs.get('name', None)
+		self.use_default_network = use_default_network
+		if self.use_default_network: self.default_network()
+		self.set_graph_description()
 
 	def receive_inputs(self, internal_embedding=True, embedding2_dim=12, multi_class_targets=True):
 		'''
@@ -35,7 +38,7 @@ class NNGraph():
 		self.dual_embedding = embedding2_dim > 0
 		self.multi_class_targets = multi_class_targets
 		self.embedding2_dim = embedding2_dim
-		with self.graph.as_default():
+		with self.graph.as_default(), tf.name_scope('receive_inputs'):
 			tf.set_random_seed(0)
 			self.drop_out = tf.constant(0.0)
 			if self.internal_embedding:
@@ -56,7 +59,7 @@ class NNGraph():
 			else:
 				self.targets = tf.placeholder(tf.int32, (self.batch_size,))
 				self.targets_oh = tf.one_hot(self.targets, self.classes, on_value=1, off_value=0)
-			return True
+		self.set_graph_description()
 
 	def rnn(self, num_units=200, num_layers=1, cell_type='gru', dual_embedding=False, gru_act=None):
 		'''
@@ -65,27 +68,31 @@ class NNGraph():
 		gru_act: activation function for the gru cell, None: default (tanh)
 		dual_embedding: use dual embedding from inputs
 		'''
-		self.num_units = num_units
-		self.num_layers = num_layers
+		self.rnn_num_units = num_units
+		self.rnn_num_layers = num_layers
+		self.rnn_cell_type = cell_type
+		self.rnn_dual_embedding = dual_embedding
+		self.rnn_gru_act = gru_act
+		
 		if self.dual_embedding and dual_embedding: inputs_d = self.inputs_de_d
 		else: inputs_d = self.inputs_d
-		with self.graph.as_default():
+		with self.graph.as_default(), tf.name_scope('rnn'):
 			if cell_type == 'lstm':
-				self.cell = rnn.BasicLSTMCell(self.num_units)
+				self.cell = rnn.BasicLSTMCell(num_units)
 			elif cell_type == 'gru':
-				if gru_act is None: self.cell = rnn.GRUCell(self.num_units)
-				else: self.cell = rnn.GRUCell(self.num_units, activation=gru_act)
+				if gru_act is None: self.cell = rnn.GRUCell(num_units)
+				else: self.cell = rnn.GRUCell(num_units, activation=gru_act)
 			if num_layers>1:
-				self.cell = tf.contrib.rnn.MultiRNNCell([self.cell] * self.num_layers)
+				self.cell = tf.contrib.rnn.MultiRNNCell([self.cell] * num_layers)
 			self.all_outputs, self.final_states = tf.nn.dynamic_rnn(self.cell, inputs_d, dtype=tf.float32)
 			self.outputs = self.all_outputs[:,-1]
 			
-			self.softmax_w = tf.Variable(tf.random_uniform((self.num_units, self.classes), 0.0001, 0.001))
+			self.softmax_w = tf.Variable(tf.random_uniform((num_units, self.classes), 0.0001, 0.001))
 			self.softmax_b = tf.Variable(tf.random_uniform((self.classes,), 0.0001, 0.001))
 			
 			self.rnn_logits = tf.matmul(self.outputs, self.softmax_w) + self.softmax_b
 			self.rnn_probs = self.probs = tf.nn.softmax(self.rnn_logits)
-		return True
+		self.set_graph_description()
 		
 	def cnn(self, concat_axis=2, dual_embedding=True, **kwargs):
 		'''
@@ -99,10 +106,12 @@ class NNGraph():
 		'''
 		self.conv_params = kwargs.get('conv_params', [[[100, 1], [100, 2], [50, 7]], [[self.embedding_dim, 2]]])
 		self.pool_params = kwargs.get('pool_params', [[6, 3], [6, 2]])
+		self.cnn_dual_embedding = dual_embedding
+		
 		if self.dual_embedding and dual_embedding: inputs_d = self.inputs_de_d
 		else: inputs_d = self.inputs_d
 		
-		with self.graph.as_default():
+		with self.graph.as_default(), tf.name_scope('cnn'):
 			cnn = inputs_d
 			self.conv, self.pool=[], []
 			for i in range(max(len(self.conv_params), len(self.pool_params))):
@@ -119,7 +128,7 @@ class NNGraph():
 			self.dense = tf.layers.dense(inputs=self.flat, units=self.classes, activation=tf.nn.relu)
 			self.cnn_logits = self.dense
 			self.cnn_probs = self.probs = tf.nn.softmax(self.cnn_logits)
-		return True
+		self.set_graph_description()
 
 	def conv_layer(self, inputs, filters_params, concat_axis=2):
 		'''
@@ -162,26 +171,41 @@ class NNGraph():
 		Merge the network's RNN with its CNN
 		factor: a ratio 0.0:1.0 to be used from RNN probabilities where 1-factor is used for the CNN
 		'''
-		with self.graph.as_default():
+		self.merge_factor = factor
+		with self.graph.as_default(), tf.name_scope('merge'):
 			self.probs = factor * self.rnn_probs + (1-factor) * self.cnn_probs
-		return True
+		self.set_graph_description()
 
-	def training(self):
+	def training(self, loss_name = 'sse_r'):
 		'''
 		Add a loss function and an optimizer
+		args:
+		loss_name: name of the loss function. options: ('sse_r', 'mse_r', 'mse') ['sse_r']
+		'sse_r': sum of squares of RELUs error
+		'mse_r': mean of squares of RELUs error
+		'mse': mean of squares error
 		'''
-		with self.graph.as_default():
-			self.losses=tf.reduce_sum(tf.square(tf.nn.relu(tf.subtract(self.targets_mc, self.probs))))
+		with self.graph.as_default(), tf.name_scope('training'):
+			if loss_name == 'sse_r':
+				self.losses=tf.reduce_sum(tf.square(tf.nn.relu(tf.subtract(self.targets_mc, self.probs))))
+			elif loss_name == 'mse_r':
+				self.losses=tf.reduce_mean(tf.square(tf.nn.relu(tf.subtract(self.targets_mc, self.probs))))
+			else:
+				loss_name = 'mse'
+				self.losses=tf.reduce_mean(tf.square(tf.subtract(self.targets_mc, self.probs)))
+			self.loss_name = loss_name
 			self.opt = tf.train.AdamOptimizer()
+			self.opt_name = 'adam'
 			self.opt_op = self.opt.minimize(self.losses)
 			self.global_variables_initializer = tf.global_variables_initializer()
 			self.train_saver = tf.train.Saver()
-		return True
+		self.set_graph_description()
 
 	def default_network(self):
 		'''
 		Build a full network using the default options
 		'''
+		if self.name is None: self.name = 'default'
 		self.receive_inputs()
 		# RNN
 		self.rnn()
@@ -210,3 +234,57 @@ class NNGraph():
 		
 		self.training()
 		return True
+
+	def set_graph_description(self):
+		'''
+		Sets a description for the graph according to the provided parameters. it can be used later for analysis
+		'''
+		description = dict()
+		description['name'] = self.name
+		
+		init = dict()
+		init['batch_size'] = self.batch_size
+		init['num_steps'] = self.num_steps
+		init['vocab_size'] = self.vocab_size
+		init['embedding_dim'] = self.embedding_dim
+		init['classes'] = self.classes
+		init['use_default_network'] = self.use_default_network
+		description['init'] = init
+
+		if hasattr(self, 'internal_embedding'):
+			inputs = dict()
+			inputs['internal_embedding'] = self.internal_embedding
+			inputs['dual_embedding'] = self.dual_embedding
+			inputs['multi_class_targets'] = self.multi_class_targets
+			inputs['embedding2_dim'] = self.embedding2_dim
+			description['inputs'] = inputs
+
+		if hasattr(self, 'rnn_probs'):
+			rnn = dict()
+			rnn['num_units'] = self.rnn_num_units
+			rnn['num_layers'] = self.rnn_num_layers
+			rnn['cell_type'] = self.rnn_cell_type
+			rnn['dual_embedding'] = self.rnn_dual_embedding
+			rnn['gru_act'] = self.rnn_gru_act
+			description['rnn'] = rnn
+
+		if hasattr(self, 'cnn_probs'):
+			cnn = dict()
+			cnn['conv_params'] = self.conv_params
+			cnn['pool_params'] = self.pool_params
+			cnn['dual_embedding'] = self.cnn_dual_embedding
+			description['cnn'] = cnn
+
+		if hasattr(self, 'merge_factor'):
+			merge = dict()
+			merge['factor'] = self.merge_factor
+			description['merge'] = merge
+			
+		if hasattr(self, 'loss_name'):
+			training = dict()
+			training['loss_name'] = self.loss_name
+			training['opt_name'] = self.opt_name
+			description['training'] = training
+		
+		self.description = description
+

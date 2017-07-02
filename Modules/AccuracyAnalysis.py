@@ -1,4 +1,7 @@
 import numpy as np
+import matplotlib.pyplot as plt
+import os, json
+
 class AccuracyAnalysis:
 	'''
 	Analyze accuracy of the classifier over time
@@ -21,6 +24,8 @@ class AccuracyAnalysis:
 		self.max_train_acc, self.max_test_acc, self.max_test_acc2, self.max_test_acc3 = 0, 0, 0, 0
 		self.train_iters = 0
 		self.saved_iters = []
+		self.sess_save_path = None
+		self.note = ''
 
 	def add_probs(self, train_probs, test_probs, data_set=None):
 		'''
@@ -43,6 +48,7 @@ class AccuracyAnalysis:
 		self.saved_iters.append(self.train_iters)
 		self.update_accuracies()
 		self.update_statistics()
+		self.log()
 		return self.test_acc, self.max_test_acc
 
 	def update_accuracies(self):
@@ -154,6 +160,63 @@ class AccuracyAnalysis:
 		self.train_baseline = baseline()
 		selected_sents = self.test_targets
 		self.test_baseline = baseline() if self.max_test!=0 else 0
+
+	def set_plot(self):
+		'''
+		Prepares the plot of the train and test accuracies
+		'''
+		plt.gca().cla() 
+		plt.plot(self.saved_iters, self.train_accs, label="train(bl=" + '{:.3}'.format(self.train_baseline) + ")")
+		plt.plot(self.saved_iters, self.test_accs, label="test (bl=" + '{:.3}'.format(self.test_baseline) + ")")
+		plt.title('Accuracy at iterations ({}:{})'.format(self.saved_iters[0], self.saved_iters[-1]))
+		plt.legend(loc='best') #upper left
+
+	def tweets_with_results(self, group ='wrong', threshold = 0.5):
+		'''
+		Gets each tweet with its results from the classifier and targets as a string
+		'''
+		sent_map=['Happy','Love','Hopeful','Neutral','Angry','Hopeless','Hate','Sad']
+		text = ''
+		for i in range(self.max_test):
+			item_acc = np.sum(self.tests_acc[i])/np.sum(self.data_set.sents_sc_np[self.max_train+i])
+			condition = True
+			if group == 'wrong': condition = item_acc<threshold
+			if group == 'correct': condition = item_acc>=threshold
+			if condition:
+				tweet = self.data_set.tweets[self.max_train+i]
+				ress=', '.join(['{}: {:.3}'.format(sent_map[l], self.test_probs[i, l]) for l in np.argsort(self.test_probs[i])[::-1][:3] if self.test_probs[i, l]>0.01])
+				targets=', '.join([sent_map[j] for j in self.data_set.sentiments_lists[self.max_train+i]])
+				text += tweet + '\n> ' + ress + " >> " + targets + '\n'
+		return text
+
+	def log(self):
+		'''
+		Saves a log about the training accuracies and results and graph description
+		'''
+##                log_folder = os.path.join(data_path, 'log', "{}_tr{}te{}_Ru{}l{}do{}d{}+{}_{}".format(iters_label, max_train, max_test, num_units, num_layers, drop_out, embedding_dim, embedding2_dim, session_init_time))
+		log_folder = os.path.join(self.train_stats.data_path, 'log', "{}_{}".format(self.train_stats.graph_description['name'], self.train_stats.session_init_time))
+		if not os.path.exists(log_folder): os.makedirs(log_folder)
+		
+		plot_file_name = os.path.join(log_folder, "plot")
+		self.set_plot()
+		plt.savefig(plot_file_name + '.svg');
+		plt.savefig(plot_file_name + '.png');
+		plt.close()
+		
+		stats = self.statistics + '\n\nsession save path:\n{}'.format(self.sess_save_path) if self.sess_save_path is not None else ''
+		with open(os.path.join(log_folder, "statistics.txt"), 'w') as log_file: log_file.write(stats)
+		
+		with open(os.path.join(log_folder, "results-rejected.txt"), 'w', encoding = 'utf-8') as log_file: log_file.write(self.tweets_with_results())
+		with open(os.path.join(log_folder, "results-approved.txt"), 'w', encoding = 'utf-8') as log_file: log_file.write(self.tweets_with_results(group = 'correct'))
+		if self.note!='':
+			with open(os.path.join(log_folder, "note.txt"), 'w') as log_file: log_file.write(self.note)
+		with open(os.path.join(log_folder, "graph_description.txt"), 'w') as log_file: log_file.write(json.dumps(self.train_stats.graph_description, indent=4, sort_keys=True))
+
+	def set_note(self):
+		'''
+		Set a note to be saved with the log
+		'''
+		self.note = input("Note:\n")
 		
 	def sec2clock(self, s):
 		'''
@@ -179,3 +242,4 @@ class TrainStats():
 		'''
 		self.train_iters = 0
 		self.train_time = 0
+		self.session_init_time = None
