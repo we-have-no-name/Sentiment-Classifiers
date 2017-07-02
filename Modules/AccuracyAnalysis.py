@@ -203,7 +203,7 @@ class AccuracyAnalysis:
 		plt.savefig(plot_file_name + '.png');
 		plt.close()
 		
-		stats = self.statistics + '\n\nsession save path:\n{}'.format(self.sess_save_path) if self.sess_save_path is not None else ''
+		stats = self.statistics + ('\n\nsession save path:\n{}'.format(self.sess_save_path) if self.sess_save_path is not None else '')
 		with open(os.path.join(log_folder, "statistics.txt"), 'w') as log_file: log_file.write(stats)
 		
 		with open(os.path.join(log_folder, "results-rejected.txt"), 'w', encoding = 'utf-8') as log_file: log_file.write(self.tweets_with_results())

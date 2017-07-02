@@ -44,7 +44,7 @@ class IncomingQueue(Queue):
 		Extracts required data from a tweet json string,
 		then adds the generated object to a queue
 		'''
-		if len(tweet)>2:
+		if type(tweet) is list:
 			tweet_object = Tweet(tweet)
 		## case of a pseudo tweet
 		else: tweet_object = PseudoTweet(tweet)

@@ -15,6 +15,7 @@ class NNGraph():
 		vocab_size: the size of the embedding vocabulary
 		embedding_dim: the dimensionality of the embedding
 		classes: the count of the possible classes that result from the classifier
+		name: the name given to the graph
 		'''
 		self.graph = tf.Graph()
 		self.batch_size = batch_size
