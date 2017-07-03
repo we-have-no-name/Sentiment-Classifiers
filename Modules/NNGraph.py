@@ -28,20 +28,22 @@ class NNGraph():
 		if self.use_default_network: self.default_network()
 		self.set_graph_description()
 
-	def receive_inputs(self, internal_embedding=True, embedding2_dim=12, multi_class_targets=True):
+	def receive_inputs(self, internal_embedding=True, embedding2_dim=12, drop_out=None, multi_class_targets=True):
 		'''
 		Add the first layer that receives inputs from the outside
 		internal_embedding: receive word keys instead of embeddings and collect the embeddings from the graph's internal word embedding
 		embedding2_dim: (only with internal_embedding) the dimensionality of the second embedding for each word
+		drop_out: the drop_out applied to the inputs. (use_drop_out must be set True by the session)
 		multi_class_targets: receive probabilies of each target class instead of the index of one top class
 		'''
 		self.internal_embedding = internal_embedding
 		self.dual_embedding = embedding2_dim > 0
-		self.multi_class_targets = multi_class_targets
 		self.embedding2_dim = embedding2_dim
+		self.inputs_drop_out = drop_out
+		self.multi_class_targets = multi_class_targets
 		with self.graph.as_default(), tf.name_scope('receive_inputs'):
 			tf.set_random_seed(0)
-			self.drop_out = tf.constant(0.0)
+			self.use_drop_out = tf.constant(False)
 			if self.internal_embedding:
 				self.embedding = tf.Variable(tf.constant(0, dtype=tf.float32, shape=(self.vocab_size, self.embedding_dim)), trainable=False, name='embedding')
 				self.embedding_saver = tf.train.Saver({'embedding': self.embedding})
@@ -51,10 +53,15 @@ class NNGraph():
 					self.embedding2 = tf.Variable(tf.random_uniform((self.vocab_size, self.embedding2_dim), 0.0001, 0.001))
 					self.inputs_e2 = tf.gather(self.embedding2, self.inputs_keys)
 					self.inputs_de = tf.concat((self.inputs, self.inputs_e2), axis=2)
+				else: self.inputs_de = self.inputs
 			else:
 				self.inputs = tf.placeholder(tf.float32, (self.batch_size, self.num_steps, self.embedding_dim))
-			self.inputs_d = tf.nn.dropout(self.inputs, 1-self.drop_out)
-			self.inputs_de_d = tf.nn.dropout(self.inputs_de, 1-self.drop_out)
+			if drop_out is not None:
+				self.inputs_d = tf.cond(self.use_drop_out, lambda:tf.nn.dropout(self.inputs, 1-self.inputs_drop_out), lambda: self.inputs)
+				self.inputs_de_d = tf.cond(self.use_drop_out, lambda:tf.nn.dropout(self.inputs_de, 1-self.inputs_drop_out), lambda: self.inputs_de)
+			else:
+				self.inputs_d = self.inputs
+				self.inputs_de_d = self.inputs_de
 			if self.multi_class_targets:
 				self.targets_mc =  tf.placeholder(tf.float32, (self.batch_size, self.classes))
 			else:
@@ -62,27 +69,31 @@ class NNGraph():
 				self.targets_oh = tf.one_hot(self.targets, self.classes, on_value=1, off_value=0)
 		self.set_graph_description()
 
-	def rnn(self, num_units=200, num_layers=1, cell_type='gru', dual_embedding=False, gru_act=None):
+	def rnn(self, num_units=200, num_layers=1, drop_outs = None, cell_type='gru', dual_embedding=False, act=None):
 		'''
 		Build a multi layer RNN
+		drop_outs: list [input_drop_out, output_drop_out]. (use_drop_out must be set True by the session)
 		cell_type: 'gru' or 'lstm'
-		gru_act: activation function for the gru cell, None: default (tanh)
+		act: activation function for the rnn cell, None: default (tanh)
 		dual_embedding: use dual embedding from inputs
 		'''
 		self.rnn_num_units = num_units
 		self.rnn_num_layers = num_layers
+		self.rnn_drop_outs = drop_outs
 		self.rnn_cell_type = cell_type
 		self.rnn_dual_embedding = dual_embedding
-		self.rnn_gru_act = gru_act
+		self.rnn_act = act
 		
 		if self.dual_embedding and dual_embedding: inputs_d = self.inputs_de_d
 		else: inputs_d = self.inputs_d
 		with self.graph.as_default(), tf.name_scope('rnn'):
+			if act is None: act = tf.tanh
 			if cell_type == 'lstm':
-				self.cell = rnn.BasicLSTMCell(num_units)
+				self.cell = rnn.BasicLSTMCell(num_units, activation=act)
 			elif cell_type == 'gru':
-				if gru_act is None: self.cell = rnn.GRUCell(num_units)
-				else: self.cell = rnn.GRUCell(num_units, activation=gru_act)
+				self.cell = rnn.GRUCell(num_units, activation=act)
+			if self.rnn_drop_outs is not None:
+				self.cell = rnn.DropoutWrapper(self.cell, 1-self.rnn_drop_outs[0], 1-self.rnn_drop_outs[1])
 			if num_layers>1:
 				self.cell = tf.contrib.rnn.MultiRNNCell([self.cell] * num_layers)
 			self.all_outputs, self.final_states = tf.nn.dynamic_rnn(self.cell, inputs_d, dtype=tf.float32)
@@ -102,33 +113,57 @@ class NNGraph():
 			filter_params: [filters, kernel_size, [stride]]
 		pool_params: 2D list of shape [layers, pool_params]
 			pool_params: [pool_size, strides]
+		cnn_dropout_params: list [[conv1_drop_out, pool1_drop_out], ..., flat_drop_out, dense_drop_out]
+			(use_drop_out must be set True by the session)
 		use None to skip a layer
 		dual_embedding: use dual embedding from inputs
 		'''
 		self.conv_params = kwargs.get('conv_params', [[[100, 1], [100, 2], [50, 7]], [[self.embedding_dim, 2]]])
 		self.pool_params = kwargs.get('pool_params', [[6, 3], [6, 2]])
+		self.cnn_dropout_params = kwargs.get('cnn_dropout_params', None)
 		self.cnn_dual_embedding = dual_embedding
 		
 		if self.dual_embedding and dual_embedding: inputs_d = self.inputs_de_d
 		else: inputs_d = self.inputs_d
 		
 		with self.graph.as_default(), tf.name_scope('cnn'):
-			cnn = inputs_d
-			self.conv, self.pool=[], []
+			cnn = inputs_d #initially
+			self.convs, self.pools, self.cnn_drop_outs=[], [], []
 			for i in range(max(len(self.conv_params), len(self.pool_params))):
-				if len(self.conv_params)-1 >= i and self.conv_params[i] is not None:
-					self.conv.append(self.conv_layer(cnn, self.conv_params[i], concat_axis))
-					cnn = self.conv[-1]
-				else: self.conv.append(None)
-				if len(self.pool_params)-1 >= i and self.pool_params[i] is not None:
-					self.pool.append(self.pool_layer(cnn, self.pool_params[i]))
-					cnn = self.pool[-1]
-				else: self.pool.append(None)
+				params = self.conv_params
+				if len(params)-1 >= i and params[i] is not None:
+					self.convs.append(self.conv_layer(cnn, self.conv_params[i], concat_axis))
+					cnn = self.convs[-1]
+				else: self.convs.append(None)
+				params = self.cnn_dropout_params
+				if params is not None and len(params)-1 >= i and params[i] is not None and params[i][0] is not None:
+					self.cnn_drop_outs.append([])
+					self.cnn_drop_outs[-1].append(tf.cond(self.use_drop_out, lambda:tf.nn.dropout(cnn, 1-self.cnn_dropout_params[i]), lambda:cnn))
+					cnn = self.cnn_drop_outs[-1][0]
+				else: self.cnn_drop_outs.append(None)
+				params = self.pool_params
+				if len(params)-1 >= i and params[i] is not None:
+					self.pools.append(self.pool_layer(cnn, self.pool_params[i]))
+					cnn = self.pools[-1]
+				else: self.pools.append(None)
+				params = self.cnn_dropout_params
+				if params is not None and len(params)-1 >= i and params[i] is not None and params[i][1] is not None:
+					if self.cnn_dropout_params[i][0] is None: self.cnn_drop_outs.append([None])
+					self.cnn_drop_outs[-1].append(tf.cond(self.use_drop_out, lambda:tf.nn.dropout(cnn, 1-self.cnn_dropout_params[i]), lambda:cnn))
+					cnn = self.cnn_drop_outs[-1][1]
+				else: self.cnn_drop_outs.append(None)
 
-			self.flat = tf.reshape(cnn, (-1, cnn.shape[1].value * cnn.shape[2].value))
-			self.dense = tf.layers.dense(inputs=self.flat, units=self.classes, activation=tf.nn.relu)
-			self.cnn_logits = self.dense
-			self.cnn_probs = self.probs = tf.nn.softmax(self.cnn_logits)
+			self.flat = cnn = tf.reshape(cnn, (-1, cnn.shape[1].value * cnn.shape[2].value))
+			params = self.cnn_dropout_params
+			if params is not None and len(params)-1 >= i and params[i] is not None:
+				self.flat_d = cnn = tf.cond(self.use_drop_out, lambda:tf.nn.dropout(cnn, 1-self.cnn_dropout_params[i]), lambda:cnn)
+			i+=1
+			self.dense = cnn = tf.layers.dense(inputs=self.flat, units=self.classes, activation=tf.nn.relu)
+			params = self.cnn_dropout_params
+			if params is not None and len(params)-1 >= i and params[i] is not None:
+				self.dense_d = cnn = tf.cond(self.use_drop_out, lambda:tf.nn.dropout(cnn, 1-self.cnn_dropout_params[i]), lambda:cnn)
+			self.cnn_logits = cnn
+			self.cnn_probs = self.probs = tf.nn.softmax(cnn)
 		self.set_graph_description()
 
 	def conv_layer(self, inputs, filters_params, concat_axis=2):
@@ -144,7 +179,9 @@ class NNGraph():
 			if concat_axis==2:
 				if len(filters)>=1: f = tf.pad(f, [[0,0], [0, filters[0].shape[1].value-f.shape[1].value], [0,0]])
 			filters.append(f)
-		return tf.concat(filters, concat_axis)
+		if len(filters)>1: layer =  tf.concat(filters, concat_axis)
+		else: layer = filters[0]
+		return layer
 
 	def pool_layer(self, inputs, pool_params):
 		'''
@@ -259,23 +296,26 @@ class NNGraph():
 			inputs = dict()
 			inputs['internal_embedding'] = self.internal_embedding
 			inputs['dual_embedding'] = self.dual_embedding
-			inputs['multi_class_targets'] = self.multi_class_targets
 			inputs['embedding2_dim'] = self.embedding2_dim
+			inputs['drop_out'] = self.inputs_drop_out
+			inputs['multi_class_targets'] = self.multi_class_targets
 			description['inputs'] = inputs
 
 		if hasattr(self, 'rnn_probs'):
 			rnn = dict()
 			rnn['num_units'] = self.rnn_num_units
 			rnn['num_layers'] = self.rnn_num_layers
+			rnn['drop_outs'] = self.rnn_drop_outs
 			rnn['cell_type'] = self.rnn_cell_type
 			rnn['dual_embedding'] = self.rnn_dual_embedding
-			rnn['gru_act'] = self.rnn_gru_act
+			rnn['act'] = self.rnn_act
 			description['rnn'] = rnn
 
 		if hasattr(self, 'cnn_probs'):
 			cnn = dict()
 			cnn['conv_params'] = self.conv_params
 			cnn['pool_params'] = self.pool_params
+			cnn['dropout_params'] = self.cnn_dropout_params
 			cnn['dual_embedding'] = self.cnn_dual_embedding
 			description['cnn'] = cnn
 

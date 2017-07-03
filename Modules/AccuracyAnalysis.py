@@ -161,7 +161,7 @@ class AccuracyAnalysis:
 			baseline = 0
 			for i in range(3): 
 				baseline = max(baseline, np.mean(np.sum(np.minimum(selected_sents, top_probs[i]), 1)))
-		#     baseline = np.mean(np.sum(np.minimum(selected_sents, top=_probs[np.sum(selected_sents>0, 1)-1]), 1))
+##			baseline = np.mean(np.sum(np.minimum(selected_sents, top=_probs[np.sum(selected_sents>0, 1)-1]), 1))
 			return baseline
 		
 		selected_sents = self.train_targets

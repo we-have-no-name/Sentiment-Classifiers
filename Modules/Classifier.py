@@ -15,8 +15,8 @@ class Classifier:
 		'''
 		Sets and initializes the classifier's TensorFlow graph and session, the data_set and the accuracy analyzer
 		args:
-		graph: object of NNGraph
-		data_set: object of DataSetReader
+		graph: instance of NNGraph
+		data_set: instance of DataSetReader
 		user_config_filename: name of the file that has the user configurations
 		restore_saved_session: restore a saved session instead of training one (can still be trained after restore)
 		'''
@@ -46,7 +46,7 @@ class Classifier:
 		self.train_stats.session_init_time = 'UTC'+time.strftime("%y%m%d-%H%M%S", time.gmtime())
 		self.train_stats.data_path = self.data_path
 		
-		if kwargs.get('set_note', False)==True: self.accuracy_analysis.set_note();
+		if kwargs.get('set_note', False)==True: self.accuracy_analysis.set_note()
 		
 	def set_config_file(self, user_config_filename):
 		'''
@@ -71,24 +71,22 @@ class Classifier:
 		self.graph.embedding_saver.restore(self.sess, os.path.join(self.data_path, "d"+ str(self.graph.embedding_dim) + "_word_embedding", "TF_Variables", "Embedding"))
 		return True
 		
-	def train(self, iters=100, inputs=None, targets=None, batch_size=50, max_train=None, max_test=None, **kwargs):
+	def train(self, iters=100, data_set = None, batch_size=50, max_train=None, max_test=None, **kwargs):
 		'''
 		Trains the classifier (can be called multiple times and after a session is restored)
 		args:
-		inputs: a list of strings to classify
-		targets: a numpy array of shape (inputs_length, classes_count) having each string's probabilitis for each class
+		data_set: an instance of DataSetReader having the data set to train from
 		iters: training iterations
 		batch_size: the batch size for training
 		max_train: count of items from inputs used for training
 		max_test: count of items from inputs used for testing
 		'''
-		if(inputs==None and targets==None):
-			inputs = self.data_set.tweets
-			targets = self.data_set.sents_sc_np
+		if(data_set!=None): self.data_set=data_set
+		inputs = self.data_set.tweets
+		targets = self.data_set.sents_sc_np
 		inputs_count = len(inputs)
 		if max_train is None: max_train=int(inputs_count*0.8)
 		if max_test is None: max_test=int(inputs_count*0.2)
-		drop_out = kwargs.get('drop_out', 0.0)
 		print_stats = kwargs.get('print_stats', False)
 		checkpoint_distance = kwargs.get('checkpoint_distance', 5)
 		
@@ -113,12 +111,12 @@ class Classifier:
 				np_inputs_keys = inputs_keys[batch_start:batch_end, :self.graph.num_steps]
 				np_targets = targets[batch_start:batch_end]
 				if checkpoint is not None:
-##					_, np_probs = self.sess.run([self.graph.opt_op, self.graph.probs], feed_dict={self.graph.inputs: np_inputs, self.graph.targets_mc: np_targets, self.graph.drop_out:drop_out})
-					_, np_probs = self.sess.run([self.graph.opt_op, self.graph.probs], feed_dict={self.graph.inputs_keys: np_inputs_keys, self.graph.targets_mc: np_targets, self.graph.drop_out:drop_out})
+##					_, np_probs = self.sess.run([self.graph.opt_op, self.graph.probs], feed_dict={self.graph.inputs: np_inputs, self.graph.targets_mc: np_targets, self.graph.use_drop_out: True})
+					_, np_probs = self.sess.run([self.graph.opt_op, self.graph.probs], feed_dict={self.graph.inputs_keys: np_inputs_keys, self.graph.targets_mc: np_targets, self.graph.use_drop_out: True})
 					iter_train_probs[batch_start:batch_end] = np_probs
 				else:
-##					_ = self.sess.run([self.graph.opt_op], feed_dict={self.graph.inputs: np_inputs, self.graph.targets_mc: np_targets})
-					_ = self.sess.run([self.graph.opt_op], feed_dict={self.graph.inputs_keys: np_inputs_keys, self.graph.targets_mc: np_targets})
+##					_ = self.sess.run([self.graph.opt_op], feed_dict={self.graph.inputs: np_inputs, self.graph.targets_mc: np_targets, self.graph.use_drop_out: True})
+					_ = self.sess.run([self.graph.opt_op], feed_dict={self.graph.inputs_keys: np_inputs_keys, self.graph.targets_mc: np_targets, self.graph.use_drop_out: True})
 			self.train_stats.train_iters += 1
 			
 			if checkpoint is None: continue
