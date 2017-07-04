@@ -1,22 +1,24 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import os, json
+import json, os, shutil
 
 class AccuracyAnalysis:
 	'''
 	Analyze accuracy of the classifier over time
 	'''
-	def __init__(self, train_stats, classes=8, data_set=None):
+	def __init__(self, classes=8, data_set=None, log_folder='Temp', graph_description=None):
 		'''
 		Initialize accuracy arrays
 		args:
-		train_stats: a TrainStats object
 		classes: count of the classes used by the classifier
 		data_set: the data_set used to train the classifier (can be replaced later)
+		log_folder: the folder to save the logs to
+		graph_description: the description of the neural network graph
 		'''
-		self.train_stats = train_stats
 		self.classes = classes
 		self.data_set = data_set
+		self.log_folder = log_folder
+		self.graph_description = graph_description
 		self.train_accs = np.zeros(0)
 		self.test_accs = np.zeros(0)
 		self.test_accs2 = np.zeros(0)
@@ -24,7 +26,9 @@ class AccuracyAnalysis:
 		self.max_train_acc, self.max_test_acc, self.max_test_acc2, self.max_test_acc3 = 0, 0, 0, 0
 		self.train_iters = 0
 		self.saved_iters = []
+		self.train_time = 0
 		self.sess_save_path = None
+		self.script_path = None
 		self.note = ''
 
 	def add_probs(self, train_probs, test_probs, data_set=None):
@@ -44,7 +48,6 @@ class AccuracyAnalysis:
 		self.test_targets = self.data_set.sents_sc_np[self.max_train:self.max_train+self.max_test]
 		self.baseline_pf()
 
-		self.train_iters = self.train_stats.train_iters
 		self.saved_iters.append(self.train_iters)
 		self.update_accuracies()
 		self.update_statistics()
@@ -147,7 +150,7 @@ class AccuracyAnalysis:
 		test_acc2 = 'test_acc2: {:.3}  \ttop test_acc2: {:.3} @{}\n'.format(self.test_accs2[-1], max(self.test_accs2), self.saved_iters[np.argmax(self.test_accs2)])
 		test_acc3 = 'test_acc3: {:.3}  \ttop test_acc3: {:.3} @{}\n'.format(self.test_accs3[-1], max(self.test_accs3), self.saved_iters[np.argmax(self.test_accs3)])
 		std_dev = 'standard deviation: {:.3}\n'.format(np.mean(np.std(self.test_probs, 0)))
-		ex_time = "execution time is {}".format(self.sec2clock(self.train_stats.train_time))
+		ex_time = "execution time is {}".format(self.sec2clock(self.train_time))
 		self.statistics = (iters + latest_acc + top_acc + baseline + pass_test + test_acc2 + test_acc3 + std_dev + ex_time)
 		return self.statistics
 	
@@ -203,23 +206,28 @@ class AccuracyAnalysis:
 		'''
 		Saves a log about the training accuracies and results and graph description
 		'''
-		log_folder = os.path.join(self.train_stats.data_path, 'log', "{} - {}".format(self.train_stats.graph_description['name'], self.train_stats.session_init_time))
-		if not os.path.exists(log_folder): os.makedirs(log_folder)
+		if not os.path.exists(self.log_folder): os.makedirs(self.log_folder)
 		
-		plot_file_name = os.path.join(log_folder, "plot")
+		plot_file_name = os.path.join(self.log_folder, "plot")
 		self.set_plot()
 		plt.savefig(plot_file_name + '.svg');
 		plt.savefig(plot_file_name + '.png');
 		plt.close()
 		
 		stats = self.statistics + ('\n\nsession save path:\n{}'.format(self.sess_save_path) if self.sess_save_path is not None else '')
-		with open(os.path.join(log_folder, "statistics.txt"), 'w') as log_file: log_file.write(stats)
+		with open(os.path.join(self.log_folder, "statistics.txt"), 'w') as log_file: log_file.write(stats)
 		
-		with open(os.path.join(log_folder, "results-rejected.txt"), 'w', encoding = 'utf-8') as log_file: log_file.write(self.tweets_with_results())
-		with open(os.path.join(log_folder, "results-approved.txt"), 'w', encoding = 'utf-8') as log_file: log_file.write(self.tweets_with_results(group = 'correct'))
+		with open(os.path.join(self.log_folder, "results-rejected.txt"), 'w', encoding = 'utf-8') as log_file:
+			log_file.write(self.tweets_with_results())
+		with open(os.path.join(self.log_folder, "results-approved.txt"), 'w', encoding = 'utf-8') as log_file:
+			log_file.write(self.tweets_with_results(group = 'correct'))
 		if self.note!='':
-			with open(os.path.join(log_folder, "note.txt"), 'w') as log_file: log_file.write(self.note)
-		with open(os.path.join(log_folder, "graph_description.txt"), 'w') as log_file: log_file.write(json.dumps(self.train_stats.graph_description, indent=4, sort_keys=True))
+			with open(os.path.join(self.log_folder, "note.txt"), 'w') as log_file: log_file.write(self.note)
+		if len(self.saved_iters)==1:
+			with open(os.path.join(self.log_folder, "graph_description.txt"), 'w') as log_file:
+				log_file.write(json.dumps(self.graph_description, indent=4, sort_keys=True))
+			if self.script_path is not None:
+				shutil.copy2(self.script_path, self.log_folder)
 
 	def set_note(self):
 		'''
@@ -240,15 +248,3 @@ class AccuracyAnalysis:
 		seconds = '{:2.0f}'.format(s)
 		if not hours and not minutes: seconds+= ' seconds'
 		return (hours + minutes + seconds).strip()
-
-class TrainStats():
-	'''
-	Stores information about training from the trainer
-	'''
-	def __init__(self):
-		'''
-		Initializes the train stats
-		'''
-		self.train_iters = 0
-		self.train_time = 0
-		self.session_init_time = None

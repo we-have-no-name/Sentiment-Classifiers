@@ -114,14 +114,14 @@ class NNGraph():
 			filter_params: [filters, kernel_size, [stride]]
 		pool_params: 2D list of shape [layers, pool_params]
 			pool_params: [pool_size, strides]
-		cnn_dropout_params: list [[conv1_drop_out, pool1_drop_out], ..., flat_drop_out, dense_drop_out]
+		dropout_params: list [[conv1_drop_out, pool1_drop_out], ..., flat_drop_out, dense_drop_out]
 			(use_drop_out must be set True by the session)
 		use None to skip a layer
 		dual_embedding: use dual embedding from inputs
 		'''
 		self.conv_params = kwargs.get('conv_params', [[[100, 1], [100, 2], [50, 7]], [[self.embedding_dim, 2]]])
 		self.pool_params = kwargs.get('pool_params', [[6, 3], [6, 2]])
-		self.cnn_dropout_params = kwargs.get('cnn_dropout_params', None)
+		self.cnn_dropout_params = kwargs.get('dropout_params', None)
 		self.cnn_dual_embedding = dual_embedding
 		
 		if self.dual_embedding and dual_embedding: inputs_d = self.inputs_de_d
@@ -257,7 +257,7 @@ class NNGraph():
 ##		self.cnn()
 
 ##		## CNN1A
-##		self.cnn(conv_params=[[[30, 2]], [[16,2]]], pool_params=[[32,1],[8,1]], dropout_params=[[None,0.3],None,0.5])
+##		self.cnn(conv_params=[[[30, 2]], [[16,2]]], pool_params=[[32,1],[8,1]], dropout_params=[[None,0.3],None,0.5], dual_embedding=False)
 ##		## CNN1.0.1
 ##		self.cnn(conv_params=[[[100, 1], [100, 2], [50, 7]], [[100, 1], [100, 2], [50, 7]]], pool_params=[[2, 2], [3, 3]])
 ##		## CNN1.0.2

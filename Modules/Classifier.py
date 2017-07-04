@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 from TweetToWordIndices import TweetToWordIndices
-from AccuracyAnalysis import AccuracyAnalysis, TrainStats
+from AccuracyAnalysis import AccuracyAnalysis
 from NNGraph import NNGraph
 from DataSetReader import DataSetReader
 import os, time
@@ -34,20 +34,22 @@ class Classifier:
 		
 		if graph != None: self.graph = graph
 		else: self.graph = NNGraph(use_default_network = True)
+		self.graph_description = self.graph.description
 		if data_set==None: data_set = DataSetReader()
 		self.data_set = data_set
 		self.num_steps = self.graph.num_steps
 		self.classes = self.graph.classes
-		self.sess = tf.Session(graph=self.graph.graph)
 		self.tweet_to_indices = TweetToWordIndices(assumed_max_length=self.num_steps)
-		self.train_stats = TrainStats()
-		self.train_stats.graph_description = self.graph.description
-		self.accuracy_analysis = AccuracyAnalysis(train_stats=self.train_stats, classes = self.classes, data_set = self.data_set)
 		
+		self.sess = tf.Session(graph=self.graph.graph)
+		session_init_time = 'UTC'+time.strftime("%y%m%d-%H%M%S", time.gmtime())
+		self.log_folder = os.path.join(self.data_path, 'log', "{} - {}".format(self.graph_description['name'], session_init_time))
 		if restore_saved_session: self.restore_session()
 		else: self.init_session()
-		self.train_stats.session_init_time = 'UTC'+time.strftime("%y%m%d-%H%M%S", time.gmtime())
-		self.train_stats.data_path = self.data_path
+		
+		self.accuracy_analysis = AccuracyAnalysis(classes = self.classes, data_set = self.data_set,
+							  log_folder = self.log_folder,
+							  graph_description = self.graph.description)
 		
 		if kwargs.get('set_note', False)==True: self.accuracy_analysis.set_note()
 		
@@ -68,14 +70,13 @@ class Classifier:
 
 	def init_session(self):
 		'''
-		Initializes a new TensorFlow session
+		Initializes a TensorFlow session
 		'''
 		self.sess.run(self.graph.global_variables_initializer)
 		self.graph.embedding_saver.restore(self.sess, os.path.join(self.data_path, "d"+ str(self.graph.embedding_dim) + "_word_embedding", "TF_Variables", "Embedding"))
 		if not self.trace_run: return True
-		summaries_path = os.path.join(self.data_path, 'TFSummaries')
-		if not os.path.exists(summaries_path): os.makedirs(summaries_path)
-		summary_path = os.path.join(summaries_path, self.train_stats.graph_description['name'])
+		if not os.path.exists(self.log_folder): os.makedirs(self.log_folder)
+		summary_path = os.path.join(self.log_folder, 'TensorBoard')
 		self.train_writer=tf.summary.FileWriter(summary_path, self.graph.graph)
 		self.train_writer.flush()
 		self.run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
@@ -109,7 +110,7 @@ class Classifier:
 		for i in range(len(inputs)):
 			inputs_keys[i] = self.tweet_to_indices.tweet_to_word_indices(inputs[i])
 		
-		train_time0 = self.train_stats.train_time
+		train_time0 = self.accuracy_analysis.train_time
 		start_time = time.time();
 		for i in range(iters):
 			checkpoint = None
@@ -128,7 +129,7 @@ class Classifier:
 ##				feed_dict = {self.graph.inputs: np_inputs, self.graph.targets_mc: np_targets, self.graph.use_drop_out: True}
 				feed_dict = {self.graph.inputs_keys: np_inputs_keys, self.graph.targets_mc: np_targets, self.graph.use_drop_out: True}
 				if checkpoint is not None:
-					trace = True if self.trace_run and self.train_stats.train_iters==0 and train==0 else None
+					trace = True if self.trace_run and self.accuracy_analysis.train_iters==0 and train==0 else None
 					options = trace and self.run_options
 					metadata = trace and self.run_metadata
 					
@@ -136,11 +137,11 @@ class Classifier:
 					iter_train_probs[batch_start:batch_end] = np_probs
 
 					if trace:
-						self.train_writer.add_run_metadata(self.run_metadata, "step %d" % self.train_stats.train_iters)
+						self.train_writer.add_run_metadata(self.run_metadata, "step %d" % self.accuracy_analysis.train_iters)
 						self.train_writer.flush()
 				else:
 					_ = self.sess.run([self.graph.opt_op], feed_dict)
-			self.train_stats.train_iters += 1
+			self.accuracy_analysis.train_iters += 1
 			
 			if checkpoint is None: continue
 
@@ -154,7 +155,7 @@ class Classifier:
 
 			end_time = time.time()
 			eta = (end_time - start_time)*(iters-i-1)/(i+1)
-			self.train_stats.train_time = train_time0 + end_time-start_time
+			self.accuracy_analysis.train_time = train_time0 + end_time-start_time
 			if self.graph.description.get('merge', dict()).get('train_ratio', False):
 				merge_ratio, = self.sess.run([self.graph.merge_ratio_variable]); merge_ratio=float(merge_ratio)
 				self.graph.description['merge']['ratio'] = self.graph.merge_ratio = merge_ratio
@@ -170,13 +171,13 @@ class Classifier:
 		args: use_graph_name: use the name of the graph as a folder name
 		'''
 		session_relative_path = self.checkpoint_name
-		if use_graph_name: session_relative_path = os.path.join(self.train_stats.graph_description['name'], 'default')
+		if use_graph_name: session_relative_path = os.path.join(self.graph_description['name'], 'default')
 		save_path = os.path.join(self.data_path, 'Sessions', session_relative_path)
 		save_folder = os.path.dirname(save_path)
 		if not os.path.exists(save_folder): os.makedirs(save_folder)
 		save_path = self.graph.train_saver.save(self.sess, save_path)
 		self.accuracy_analysis.sess_save_path = save_path
-		with open(os.path.join(save_folder, "graph_description.txt"), 'w') as log_file: log_file.write(json.dumps(self.train_stats.graph_description, indent=4, sort_keys=True))
+		with open(os.path.join(save_folder, "graph_description.txt"), 'w') as log_file: log_file.write(json.dumps(self.graph_description, indent=4, sort_keys=True))
 		return True
 	
 	def restore_session(self):

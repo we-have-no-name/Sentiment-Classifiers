@@ -1,23 +1,35 @@
 from NNGraph import NNGraph
 from Classifier import Classifier
+import os
 
 def main():
 	init()
-	train(100)
+	train(1000)
 
 def init():
 	global graph, classifier
 	name = input("Graph name: ")
+	script_path = os.path.realpath(__file__)
 	graph = NNGraph(name = name)
 
 	## Graph experiments
 	graph.receive_inputs()
-	graph.cnn()
-	graph.rnn()
+##	graph.rnn(cell_type = 'gru')
+##	graph.cnn()
+##	graph.merge_rnn_cnn(ratio=0.75, train_ratio=False)
+
+	graph.rnn(act_name='relu')
+	graph.cnn(conv_params=[[[30, 2]], [[16,2]]], pool_params=[[32,1],[8,1]], dropout_params=[[None,0.3],None,0.5], dual_embedding=False)
 	graph.merge_rnn_cnn(ratio=0.75, train_ratio=False)
+	
+	
+	
+	
+	## =================
 	
 	graph.training()
 	classifier = Classifier(graph, restore_saved_session=False)
+	classifier.accuracy_analysis.script_path = script_path
 
 def train(iters):
 	print("Training\n")

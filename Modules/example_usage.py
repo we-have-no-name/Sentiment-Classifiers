@@ -30,14 +30,10 @@ or
 from ClassifierInterface import ClassifierInterface, IncomingQueue
 from TwitterAgent import TwitterAgent
 
-## needed for this use case only
+# needed for this use case only
 import threading, time, sys
 import numpy as np
 
-## used to avoid priting emoji in IDLE
-non_bmp_map = dict.fromkeys(range(0x10000, sys.maxunicode + 1), 0xfffd)
-
-classified = 0
 def main():
 	'''
 	Runs two threads, one to receive a tweets stream and another to classify them.
@@ -76,6 +72,8 @@ def main():
 
 # An example usage of the classified tweets
 sent_map=['Happy','Love','Hopeful','Neutral','Angry','Hopeless','Hate','Sad']
+# used to avoid priting emoji in IDLE
+non_bmp_map = dict.fromkeys(range(0x10000, sys.maxunicode + 1), 0xfffd)
 def use_ready_queue(ready_queue):
 	'''
 	Prints the classified tweets.
