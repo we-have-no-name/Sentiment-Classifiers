@@ -19,7 +19,10 @@ class Classifier:
 		data_set: instance of DataSetReader
 		user_config_filename: name of the file that has the user configurations
 		restore_saved_session: restore a saved session instead of training one (can still be trained after restore)
+		trace_run: trace runtime statistics such [CPU, memory usage etc] and graph visualization
+			can be viewed using TensorBoard
 		'''
+		self.trace_run = kwargs.get('trace_run', False)
 		try:
 			json_config_file = open(user_config_filename)
 		except FileNotFoundError:
@@ -69,6 +72,14 @@ class Classifier:
 		'''
 		self.sess.run(self.graph.global_variables_initializer)
 		self.graph.embedding_saver.restore(self.sess, os.path.join(self.data_path, "d"+ str(self.graph.embedding_dim) + "_word_embedding", "TF_Variables", "Embedding"))
+		if not self.trace_run: return True
+		summaries_path = os.path.join(self.data_path, 'TFSummaries')
+		if not os.path.exists(summaries_path): os.makedirs(summaries_path)
+		summary_path = os.path.join(summaries_path, self.train_stats.graph_description['name'])
+		self.train_writer=tf.summary.FileWriter(summary_path, self.graph.graph)
+		self.train_writer.flush()
+		self.run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+		self.run_metadata = tf.RunMetadata()
 		return True
 		
 	def train(self, iters=100, data_set = None, batch_size=50, max_train=None, max_test=None, **kwargs):
@@ -80,15 +91,17 @@ class Classifier:
 		batch_size: the batch size for training
 		max_train: count of items from inputs used for training
 		max_test: count of items from inputs used for testing
+		print_stats: print training statistics
+		checkpoint_distance: distance between each test iteration
 		'''
+		print_stats = kwargs.get('print_stats', False)
+		checkpoint_distance = kwargs.get('checkpoint_distance', 5)
 		if(data_set!=None): self.data_set=data_set
 		inputs = self.data_set.tweets
 		targets = self.data_set.sents_sc_np
 		inputs_count = len(inputs)
 		if max_train is None: max_train=int(inputs_count*0.8)
 		if max_test is None: max_test=int(inputs_count*0.2)
-		print_stats = kwargs.get('print_stats', False)
-		checkpoint_distance = kwargs.get('checkpoint_distance', 5)
 		
 		iter_train_probs = np.zeros((max_train, self.classes))
 		
@@ -110,13 +123,23 @@ class Classifier:
 ##				np_inputs = inputs_embedded[batch_start:batch_end, :self.graph.num_steps]
 				np_inputs_keys = inputs_keys[batch_start:batch_end, :self.graph.num_steps]
 				np_targets = targets[batch_start:batch_end]
+				
+				fetches = [self.graph.opt_op, self.graph.probs]
+##				feed_dict = {self.graph.inputs: np_inputs, self.graph.targets_mc: np_targets, self.graph.use_drop_out: True}
+				feed_dict = {self.graph.inputs_keys: np_inputs_keys, self.graph.targets_mc: np_targets, self.graph.use_drop_out: True}
 				if checkpoint is not None:
-##					_, np_probs = self.sess.run([self.graph.opt_op, self.graph.probs], feed_dict={self.graph.inputs: np_inputs, self.graph.targets_mc: np_targets, self.graph.use_drop_out: True})
-					_, np_probs = self.sess.run([self.graph.opt_op, self.graph.probs], feed_dict={self.graph.inputs_keys: np_inputs_keys, self.graph.targets_mc: np_targets, self.graph.use_drop_out: True})
+					trace = True if self.trace_run and self.train_stats.train_iters==0 and train==0 else None
+					options = trace and self.run_options
+					metadata = trace and self.run_metadata
+					
+					_, np_probs = self.sess.run(fetches, feed_dict, options, metadata)
 					iter_train_probs[batch_start:batch_end] = np_probs
+
+					if trace:
+						self.train_writer.add_run_metadata(self.run_metadata, "step %d" % self.train_stats.train_iters)
+						self.train_writer.flush()
 				else:
-##					_ = self.sess.run([self.graph.opt_op], feed_dict={self.graph.inputs: np_inputs, self.graph.targets_mc: np_targets, self.graph.use_drop_out: True})
-					_ = self.sess.run([self.graph.opt_op], feed_dict={self.graph.inputs_keys: np_inputs_keys, self.graph.targets_mc: np_targets, self.graph.use_drop_out: True})
+					_ = self.sess.run([self.graph.opt_op], feed_dict)
 			self.train_stats.train_iters += 1
 			
 			if checkpoint is None: continue
@@ -125,8 +148,9 @@ class Classifier:
 ##			np_test_inputs = inputs_embedded[max_train:: max_train+max_test, :self.graph.num_steps]
 			np_test_inputs_keys = inputs_keys[max_train: max_train+max_test, :self.graph.num_steps]
 			np_test_targets = targets[max_train: max_train+max_test]
-##			np_test_probs, = sess.run([self.graph.probs], feed_dict={self.graph.inputs:  np_test_inputs})
-			iter_test_probs, = self.sess.run([self.graph.probs], feed_dict={self.graph.inputs_keys:  np_test_inputs_keys})
+##			feed_dict = {self.graph.inputs:  np_test_inputs}
+			feed_dict = {self.graph.inputs_keys:  np_test_inputs_keys}
+			iter_test_probs, = self.sess.run([self.graph.probs], feed_dict)
 
 			end_time = time.time()
 			eta = (end_time - start_time)*(iters-i-1)/(i+1)

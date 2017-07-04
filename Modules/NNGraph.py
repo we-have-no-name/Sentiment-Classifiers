@@ -69,7 +69,7 @@ class NNGraph():
 				self.targets_oh = tf.one_hot(self.targets, self.classes, on_value=1, off_value=0)
 		self.set_graph_description()
 
-	def rnn(self, num_units=200, num_layers=1, drop_outs = None, cell_type='gru', dual_embedding=False, act=None):
+	def rnn(self, num_units=200, num_layers=1, drop_outs = None, cell_type='gru', dual_embedding=False, act_name='tanh'):
 		'''
 		Build a multi layer RNN
 		drop_outs: list [input_drop_out, output_drop_out]. (use_drop_out must be set True by the session)
@@ -82,12 +82,13 @@ class NNGraph():
 		self.rnn_drop_outs = drop_outs
 		self.rnn_cell_type = cell_type
 		self.rnn_dual_embedding = dual_embedding
-		self.rnn_act = act
+		self.rnn_act_name = act_name
 		
+		if act_name == 'tanh': act = tf.tanh
+		elif act_name == 'relu': act = tf.nn.tanh
 		if self.dual_embedding and dual_embedding: inputs_d = self.inputs_de_d
 		else: inputs_d = self.inputs_d
 		with self.graph.as_default(), tf.name_scope('rnn'):
-			if act is None: act = tf.tanh
 			if cell_type == 'lstm':
 				self.cell = rnn.BasicLSTMCell(num_units, activation=act)
 			elif cell_type == 'gru':
@@ -254,7 +255,9 @@ class NNGraph():
 		# CNN
 		## CNN1
 ##		self.cnn()
-		
+
+##		## CNN1A
+##		self.cnn(conv_params=[[[30, 2]], [[16,2]]], pool_params=[[32,1],[8,1]], dropout_params=[[None,0.3],None,0.5])
 ##		## CNN1.0.1
 ##		self.cnn(conv_params=[[[100, 1], [100, 2], [50, 7]], [[100, 1], [100, 2], [50, 7]]], pool_params=[[2, 2], [3, 3]])
 ##		## CNN1.0.2
@@ -308,7 +311,7 @@ class NNGraph():
 			rnn['drop_outs'] = self.rnn_drop_outs
 			rnn['cell_type'] = self.rnn_cell_type
 			rnn['dual_embedding'] = self.rnn_dual_embedding
-			rnn['act'] = self.rnn_act
+			rnn['act'] = self.rnn_act_name
 			description['rnn'] = rnn
 
 		if hasattr(self, 'cnn_probs'):
