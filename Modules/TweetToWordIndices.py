@@ -18,8 +18,11 @@ class TweetToWordIndices():
 		And emoji are split from each other and replaced with special tags available for emotions in the vocabulary
 	After preprocessing each word is replaced with its word index from the embedding dictionary
 	'''
-	def __init__(self, embedding_dim=200, vocab_size=int(1.2e6), assumed_max_length=90, user_config_filename='config.json'):
-		'''Read the embedding dictionaries'''
+	def __init__(self, embedding_dim=200, vocab_size=int(1.2e6), assumed_max_length=90, user_config_filename='config.json', track_words=True):
+		'''
+		Read the embedding dictionaries
+		track_words: sets whether unmatched words will be tracked
+		'''
 		try:
 			json_config_file = open(user_config_filename)
 		except FileNotFoundError:
@@ -35,6 +38,11 @@ class TweetToWordIndices():
 		self.embedding_dim = embedding_dim
 		self.vocab_size = vocab_size
 		self.assumed_max_length = assumed_max_length
+
+		self.track_words = track_words
+		if track_words:
+			self.unmatched_words_set = set()
+			self.unmatched_words_list = []
 
 	def set_config_file(self, user_config_filename):
 		'''Set a user config file with the path that has the embedding dictionaries'''
@@ -91,11 +99,55 @@ class TweetToWordIndices():
 		word_indices=np.array([self.vocab_size-2 for _ in range(self.assumed_max_length)])
 		for i in range(len(words)) :
 			word_indices[i] = self.word_dict2.get(words[i], self.vocab_size-1)
+			if self.track_words and word_indices[i] == (self.vocab_size-1):
+				self.unmatched_words_set.add(words[i])
+				self.unmatched_words_list.append(words[i])
+				
 		return word_indices
 
 	def tweet_to_word_indices(self, txt):
-		'''Returns a list of the word indices of each word in the tweet'''
+		'''Returns an array of the word indices of each word in the tweet'''
 		words = self.tokenize(txt)
 		return self.words_to_indices(words)
-		
+
+	def tweets_to_word_indices(self, tweets):
+		'''Returns a 2D array of the word indices in each tweet'''
+		tweets_indices_list = []
+		for tweet in tweets:
+			tweets_indices_list.append(self.tweet_to_word_indices(tweet))
+		tweets_indices = np.array(tweets_indices_list)
+		return tweets_indices
 	
+	def get_match_statistics(self, tweets, tweets_indices):
+		'''
+		Gets the match statistics based on the last received tweets list
+		args:
+			tweets: a list of tweet strings
+			tweets_indices: a list of arrays of tweet word indices
+		return:
+			match_stats: a dictionary having:
+				match_ratio: the ratio of matched words per all words
+				unmatched_words_count: the count of matched words
+				unmatched_words_counts: a reverse sorted list of each unmatched word with its occurrence count
+		'''
+		if not self.track_words: return False
+		unmatched_words_flags = tweets_indices ==(self.vocab_size-1)
+		all_words_flags = tweets_indices != (self.vocab_size-2)
+		match_ratio = round(np.count_nonzero(unmatched_words_flags)/np.count_nonzero(all_words_flags), 5)
+
+		unmatched_words_count = len(self.unmatched_words_set)
+		
+		unmatched_words_counts = []
+		unmatched_words_set_l = list(self.unmatched_words_set)
+		for i in range(len(unmatched_words_set_l)):
+			unmatched_words_counts.append([self.unmatched_words_list.count(unmatched_words_set_l[i]), unmatched_words_set_l[i]])
+		unmatched_words_counts.sort(reverse=True)
+		match_stats = {'match_ratio': match_ratio, 'unmatched_words_count': unmatched_words_count, 'unmatched_words_counts':unmatched_words_counts}
+		return match_stats
+
+	def get_max_length(self, tweets_indices):
+		'''Gets the max tweet length of a list of tweet indices'''
+		for i in range(self.assumed_max_length):
+			if np.all(tweets_indices[:,i]==(self.vocab_size-2)):
+				self.max_length=i+1; break;
+		return self.max_length

@@ -39,14 +39,17 @@ class AccuracyAnalysis:
 		test_probs: test set probabilities
 		data_set: the data_set used to train the classifier 
 		'''
-		if data_set is not None: self.data_set = data_set
 		self.train_probs = train_probs
 		self.test_probs = test_probs
 		self.max_train = len(self.train_probs)
 		self.max_test = len(self.test_probs)
+		if data_set is not None:
+			self.data_set = data_set
+		if self.train_iters == 1 or data_set is not None:
+			self.update_data_set_statistics()
+		self.train_baseline, self.test_baseline = self.baseline_pf(self.max_train, self.max_test)
 		self.train_targets = self.data_set.sents_sc_np[:self.max_train]
 		self.test_targets = self.data_set.sents_sc_np[self.max_train:self.max_train+self.max_test]
-		self.baseline_pf()
 
 		self.saved_iters.append(self.train_iters)
 		self.update_accuracies()
@@ -136,8 +139,32 @@ class AccuracyAnalysis:
 		accs3 = np.sum(np.maximum(accs_r, np.minimum((probs> 0.5 * targets), targets)), 1)
 		accs3 = np.maximum(accs3, accs0)
 		acc3 = np.mean(accs3)
-		return accs3, acc3
-
+		return accs3, acc3		
+	
+	def baseline_pf(self, max_train, max_test):
+		'''
+		Calculate baselines
+		'''
+		train_targets = self.data_set.sents_sc_np[:max_train]
+		test_targets = self.data_set.sents_sc_np[max_train:max_train+max_test]
+		
+		top_probs = np.zeros((3, self.classes))
+		priority_probs = [np.array([1]), np.array([2/3, 1/3]), np.array([3/6, 2/6, 1/6])]
+		def baseline():
+			baseline = 0
+			for i in range(3): 
+				baseline = max(baseline, np.mean(np.sum(np.minimum(selected_sents, top_probs[i]), 1)))
+##			baseline = np.mean(np.sum(np.minimum(selected_sents, top=_probs[np.sum(selected_sents>0, 1)-1]), 1))
+			return baseline
+		
+		selected_sents = train_targets
+		top_indices = np.argsort(np.sum(selected_sents, 0))[::-1][:3]
+		for i in range(3): top_probs[i, top_indices[:i+1]] = priority_probs[i]
+		train_baseline = baseline()
+		selected_sents = test_targets
+		test_baseline = baseline() if max_test!=0 else 0
+		return train_baseline, test_baseline
+		
 	def update_statistics(self):
 		'''
 		Update the statistics of accuracy and training
@@ -153,26 +180,31 @@ class AccuracyAnalysis:
 		ex_time = "execution time is {}".format(self.sec2clock(self.train_time))
 		self.statistics = (iters + latest_acc + top_acc + baseline + pass_test + test_acc2 + test_acc3 + std_dev + ex_time)
 		return self.statistics
-	
-	def baseline_pf(self):
+
+	def update_dataset_baselines(self):
 		'''
-		Calculate the dataset baselines
+		Updates the dataset baselines
 		'''
-		top_probs = np.zeros((3, self.classes))
-		priority_probs = [np.array([1]), np.array([2/3, 1/3]), np.array([3/6, 2/6, 1/6])]
-		def baseline():
-			baseline = 0
-			for i in range(3): 
-				baseline = max(baseline, np.mean(np.sum(np.minimum(selected_sents, top_probs[i]), 1)))
-##			baseline = np.mean(np.sum(np.minimum(selected_sents, top=_probs[np.sum(selected_sents>0, 1)-1]), 1))
-			return baseline
-		
-		selected_sents = self.train_targets
-		top_indices = np.argsort(np.sum(selected_sents, 0))[::-1][:3]
-		for i in range(3): top_probs[i, top_indices[:i+1]] = priority_probs[i]
-		self.train_baseline = baseline()
-		selected_sents = self.test_targets
-		self.test_baseline = baseline() if self.max_test!=0 else 0
+		self.data_set_baseline = self.baseline_pf(-1, 0)[0]
+##		self.top_3_baseline = np.sum(np.sort(np.bincount(self.data_set.sents_np))[::-1][:3])/self.data_set.size
+		# sum the probabilities of the top 3 classes and divide by all
+		self.top_3_baseline = np.sum(np.sort(np.sum(self.data_set.sents_sc_np, 0))[::-1][:3])/self.data_set.size
+		# sum the counts of the top 3 classes and divide by all
+		self.top_3_baseline0 = np.count_nonzero(self.data_set.sents_mh_np[:, np.argsort(np.count_nonzero(self.data_set.sents_sc_np, 0))[::-1][:3]])/self.data_set.size
+
+	def update_data_set_statistics(self):
+		'''
+		Update the statistics of the data set
+		'''
+		self.update_dataset_baselines()
+		classes = 'Distribution:\n\tSize: {}, max length: {}\n\tClass counts: {}\n\tTweets with multiple feelings: {} ({:.3}%)'.format(
+			self.data_set.size, self.data_set.max_length, self.data_set.class_counts, self.data_set.multiclass_count, self.data_set.multiclass_ratio*100)
+		baselines = 'Baselines:\n\tData-set baseline: {:.3}\n\tTop-3-outputs-include-target baseline: {:.3}, baseline0: {:.3}'.format(
+			self.data_set_baseline, self.top_3_baseline, self.top_3_baseline0)
+		unmatched_words = '\n'.join(['{}: {}'.format(item[0], item[1]) for item in self.data_set.unmatched_words_counts])
+		matching = 'Word matching:\n\tMatch ratio: {:.5}\n\tTotal Unmatched words: {}\nUnmatched words:\n{}'.format(
+			self.data_set.match_ratio, self.data_set.unmatched_words_count, unmatched_words)
+		self.data_set_statistics = '\n\n'.join([classes, baselines, matching])
 
 	def set_plot(self):
 		'''
@@ -228,6 +260,8 @@ class AccuracyAnalysis:
 				log_file.write(json.dumps(self.graph_description, indent=4, sort_keys=True))
 			if self.script_path is not None:
 				shutil.copy2(self.script_path, self.log_folder)
+			with open(os.path.join(self.log_folder, "data_set_statistics.txt"), 'w', encoding='utf-8') as log_file:
+				log_file.write(self.data_set_statistics)
 
 	def set_note(self):
 		'''

@@ -139,7 +139,7 @@ class NNGraph():
 				params = self.cnn_dropout_params
 				if params is not None and len(params)-1 >= i and params[i] is not None and params[i][0] is not None:
 					self.cnn_drop_outs.append([])
-					self.cnn_drop_outs[-1].append(tf.cond(self.use_drop_out, lambda:tf.nn.dropout(cnn, 1-self.cnn_dropout_params[i]), lambda:cnn))
+					self.cnn_drop_outs[-1].append(tf.cond(self.use_drop_out, lambda:tf.nn.dropout(cnn, 1-params[i][0]), lambda:cnn))
 					cnn = self.cnn_drop_outs[-1][0]
 				else: self.cnn_drop_outs.append(None)
 				params = self.pool_params
@@ -150,7 +150,7 @@ class NNGraph():
 				params = self.cnn_dropout_params
 				if params is not None and len(params)-1 >= i and params[i] is not None and params[i][1] is not None:
 					if self.cnn_dropout_params[i][0] is None: self.cnn_drop_outs.append([None])
-					self.cnn_drop_outs[-1].append(tf.cond(self.use_drop_out, lambda:tf.nn.dropout(cnn, 1-self.cnn_dropout_params[i]), lambda:cnn))
+					self.cnn_drop_outs[-1].append(tf.cond(self.use_drop_out, lambda:tf.nn.dropout(cnn, 1-params[i][1]), lambda:cnn))
 					cnn = self.cnn_drop_outs[-1][1]
 				else: self.cnn_drop_outs.append(None)
 

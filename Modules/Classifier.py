@@ -1,9 +1,9 @@
+from DataSetReader import DataSetReader
+from TweetToWordIndices import TweetToWordIndices
+from NNGraph import NNGraph
+from AccuracyAnalysis import AccuracyAnalysis
 import tensorflow as tf
 import numpy as np
-from TweetToWordIndices import TweetToWordIndices
-from AccuracyAnalysis import AccuracyAnalysis
-from NNGraph import NNGraph
-from DataSetReader import DataSetReader
 import os, time
 import json
 
@@ -39,7 +39,6 @@ class Classifier:
 		self.data_set = data_set
 		self.num_steps = self.graph.num_steps
 		self.classes = self.graph.classes
-		self.tweet_to_indices = TweetToWordIndices(assumed_max_length=self.num_steps)
 		
 		self.sess = tf.Session(graph=self.graph.graph)
 		session_init_time = 'UTC'+time.strftime("%y%m%d-%H%M%S", time.gmtime())
@@ -50,6 +49,8 @@ class Classifier:
 		self.accuracy_analysis = AccuracyAnalysis(classes = self.classes, data_set = self.data_set,
 							  log_folder = self.log_folder,
 							  graph_description = self.graph.description)
+
+		self.text_indexer = TweetToWordIndices(track_words=False)
 		
 		if kwargs.get('set_note', False)==True: self.accuracy_analysis.set_note()
 		
@@ -74,14 +75,19 @@ class Classifier:
 		'''
 		self.sess.run(self.graph.global_variables_initializer)
 		self.graph.embedding_saver.restore(self.sess, os.path.join(self.data_path, "d"+ str(self.graph.embedding_dim) + "_word_embedding", "TF_Variables", "Embedding"))
-		if not self.trace_run: return True
+		if self.trace_run: self.init_train_writer()
+		return True
+
+	def init_train_writer(self):
+		'''
+		Initializes a TensorFlow train writer to be used for saving the neural network's visualization and resource usage
+		'''
 		if not os.path.exists(self.log_folder): os.makedirs(self.log_folder)
 		summary_path = os.path.join(self.log_folder, 'TensorBoard')
 		self.train_writer=tf.summary.FileWriter(summary_path, self.graph.graph)
 		self.train_writer.flush()
 		self.run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
 		self.run_metadata = tf.RunMetadata()
-		return True
 		
 	def train(self, iters=100, data_set = None, batch_size=50, max_train=None, max_test=None, **kwargs):
 		'''
@@ -97,18 +103,15 @@ class Classifier:
 		'''
 		print_stats = kwargs.get('print_stats', False)
 		checkpoint_distance = kwargs.get('checkpoint_distance', 5)
+		
 		if(data_set!=None): self.data_set=data_set
-		inputs = self.data_set.tweets
+		inputs_keys = self.data_set.tweets_indices
 		targets = self.data_set.sents_sc_np
-		inputs_count = len(inputs)
+		inputs_count = len(inputs_keys)
 		if max_train is None: max_train=int(inputs_count*0.8)
 		if max_test is None: max_test=int(inputs_count*0.2)
 		
 		iter_train_probs = np.zeros((max_train, self.classes))
-		
-		inputs_keys = np.zeros((len(inputs), self.tweet_to_indices.assumed_max_length))
-		for i in range(len(inputs)):
-			inputs_keys[i] = self.tweet_to_indices.tweet_to_word_indices(inputs[i])
 		
 		train_time0 = self.accuracy_analysis.train_time
 		start_time = time.time();
@@ -139,6 +142,7 @@ class Classifier:
 					if trace:
 						self.train_writer.add_run_metadata(self.run_metadata, "step %d" % self.accuracy_analysis.train_iters)
 						self.train_writer.flush()
+						self.train_writer.close()
 				else:
 					_ = self.sess.run([self.graph.opt_op], feed_dict)
 			self.accuracy_analysis.train_iters += 1
@@ -185,6 +189,7 @@ class Classifier:
 		Restores a trained state of the classifier
 		'''
 		self.graph.train_saver.restore(self.sess, os.path.join(self.data_path, 'Sessions', self.checkpoint_name))
+		if self.trace_run: self.init_train_writer()
 		return True
 	
 	def predict(self, inputs):
@@ -192,9 +197,9 @@ class Classifier:
 		Predicts the class probabilities for each input
 		inputs: list of strings to classify
 		'''
-		inputs_keys = np.zeros((len(inputs), self.tweet_to_indices.assumed_max_length))
+		inputs_keys = np.zeros((len(inputs), self.text_indexer.assumed_max_length))
 		for i in range(len(inputs)):
-			inputs_keys[i] = self.tweet_to_indices.tweet_to_word_indices(inputs[i])
+			inputs_keys[i] = self.text_indexer.tweet_to_word_indices(inputs[i])
 ##		np_inputs = inputs[:, :self.graph.num_steps]
 		np_inputs_keys = inputs_keys[:, :self.graph.num_steps]
 ##		output_probs, = self.sess.run([self.graph.probs], feed_dict={self.graph.inputs: inputs})

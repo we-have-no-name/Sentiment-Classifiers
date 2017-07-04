@@ -1,3 +1,4 @@
+from TweetToWordIndices import TweetToWordIndices
 import csv, json
 import numpy as np
 import os
@@ -6,12 +7,14 @@ import random
 class DataSetReader():
 	'''
 	A reader for the dataset's csv files, it extracts tweet texts and sentiments
+	then indexes words in tweets and creates target arrays from the labels of the tweets
 	attributes:
 	self.tweets: has the tweet texts
+	self.tweets_indices: has the embedding index of each word in the tweets
 	self.sents_np: has the first sentiment class of each tweet
 	self.sents_sc_np: has the probability of each class for each tweet
 	usage:
-	either set use_default_folder=True when creating the object or manually use read_file() then lists_to_arrays()
+	either set use_default_folder=True when creating the object or manually use read_file() then sentiment_lists_to_arrays()
 	'''
 	def __init__(self, use_default_folder=True, classes=8, user_config_filename='config.json'):
 		'''
@@ -32,6 +35,7 @@ class DataSetReader():
 		self.sentiments = []
 		self.sentiments_lists = []
 		self.tweets = []
+		self.text_indexer = TweetToWordIndices()
 		
 		if use_default_folder: self.read_all_files(os.path.join(self.data_path, 'DataSet'))
 		
@@ -59,28 +63,33 @@ class DataSetReader():
 		dir_contents = os.listdir(folder_path)
 		for name in dir_contents:
 			if name[-4:]=='.csv': self.read_file(os.path.join(folder_path, name), create_arrays=False)
-		self.lists_to_arrays(shuffle_seed)
+		self.tweets_to_indices()
+		self.sentiment_lists_to_arrays(shuffle_seed)
 		return True
 
-	def lists_to_arrays(self, shuffle_seed=0):
+	def sentiment_lists_to_arrays(self, shuffle_seed=0):
 		'''
 		Create numpy arrays from the sentiment lists
+			also updates the classes statitics
 		args:
 		shuffle_seed: the seed to be used to shuffle the tweets, Use None to skip shuffling
 		'''
 		if shuffle_seed is not None: self.shuffle_tweets(shuffle_seed)
-		
+
+		self.size = len(self.sentiments)
 		self.sents_np = np.array(self.sentiments, np.int16)
-		
-##		self.sents_mh_np = np.zeros((self.sents_np.shape[0], self.classes), np.bool) #mh: multihot
-##		for i in range(self.sents_np.shape[0]):
-##			self.sents_mh_np[i, self.sentiments_lists[i]] = 1
 		
 		priority_probs=[np.array([1]), np.array([2/3, 1/3]), np.array([3/6, 2/6, 1/6])]		
 		self.sents_sc_np = np.zeros((self.sents_np.shape[0], self.classes), np.float32) #sc: soft classes
 		for i in range(self.sents_np.shape[0]):
 			sc_indices = self.sentiments_lists[i]
 			self.sents_sc_np[i, sc_indices] = priority_probs[len(sc_indices)-1]
+
+		self.sents_mh_np = self.sents_sc_np > 0 #mh: multihot
+
+		self.multiclass_count = np.sum(np.sum(self.sents_mh_np, 1)>1)
+		self.multiclass_ratio = self.multiclass_count/self.size
+		self.class_counts = np.bincount(self.sents_np)
 		return True
 		
 	def shuffle_tweets(self, shuffle_seed):
@@ -104,7 +113,7 @@ class DataSetReader():
 		file_path: the path of the csv file
 		encoding: the encoding of the csv file
 		shuffle_seed: the seed to be used to shuffle the tweets, Use None to skip shuffling
-		create_arrays: create the numpy arrays for the sentiment lists, set False to read more files first
+		create_arrays: create the numpy arrays to be used for training, set False to read more files first
 		'''
 		tweets_file = open(file_path, 'r', encoding=encoding)
 		tweets_csv = csv.reader(tweets_file)
@@ -116,7 +125,9 @@ class DataSetReader():
 			self.sentiments.append(sents[0])
 			self.sentiments_lists.append(sents)
 			self.tweets.append(line[1])
-		if create_arrays: self.lists_to_arrays(shuffle_seed)
+		if create_arrays:
+			self.sentiment_lists_to_arrays(shuffle_seed)
+			self.tweets_to_indices()
 		return True
 		
 
@@ -132,3 +143,16 @@ class DataSetReader():
 			sentiment_list.append(int(i) - 1)
 		return sentiment_list
 
+	def tweets_to_indices(self):
+		'''converts the tweets list to a list of arrays of tweets indices
+			also updates the matching statitics
+		'''
+		self.size = len(self.tweets)
+		self.tweets_indices = self.text_indexer.tweets_to_word_indices(self.tweets)
+		self.max_length = self.text_indexer.get_max_length(self.tweets_indices)
+		match_stats = self.text_indexer.get_match_statistics(self.tweets, self.tweets_indices)
+		self.match_ratio = match_stats['match_ratio']
+		self.unmatched_words_count = match_stats['unmatched_words_count']
+		self.unmatched_words_counts = match_stats['unmatched_words_counts']
+		return self.tweets_indices
+		

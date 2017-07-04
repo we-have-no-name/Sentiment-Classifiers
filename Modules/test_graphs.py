@@ -4,7 +4,7 @@ import os
 
 def main():
 	init()
-	train(1000)
+	train(100)
 
 def init():
 	global graph, classifier
@@ -28,7 +28,7 @@ def init():
 	## =================
 	
 	graph.training()
-	classifier = Classifier(graph, restore_saved_session=False)
+	classifier = Classifier(graph, restore_saved_session=False, trace_run=True)
 	classifier.accuracy_analysis.script_path = script_path
 
 def train(iters):
