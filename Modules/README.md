@@ -3,7 +3,6 @@
 gets a stream of tweets and detects 8 sentiment classes in them in real time
 
 ## Requirements
-
 ### Python 3 with libraries
 * tensorflow 1.0.1
 * numpy
@@ -41,6 +40,5 @@ the *data_path* folder should have the following
     * then to train a *session*  
         run *Classifier.py* as a script  
 3. or folder *Sessions/DefaultSession* having a *checkpoint* of a trained *session*
----
-## õExample of usage
+## Example of usage
 see example_usage.py
