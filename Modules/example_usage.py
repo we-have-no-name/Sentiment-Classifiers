@@ -35,7 +35,7 @@ the data_path folder should have the following
 2. folder Sessions/DefaultSession having a checkpoint of a trained session
 3. or folder DataSet
 	* with the Data set's csv files each row of shape [link, tweet, label1, label2, label3]
-	  with labels ranging from 0:7
+	  with labels ranging from 1:8 for ['Happy','Love','Hopeful','Neutral','Angry','Hopeless','Hate','Sad']
 	* then to train a session:
 	  run Classifier.py as a script
 '''

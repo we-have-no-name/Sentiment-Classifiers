@@ -36,7 +36,7 @@ the *data_path* folder should have the following
     * then running *Word_Embeddding_Glove_Saver().run()* and choosing *embedding dim = 200*
 2. folder *DataSet*
     * has the Data set's csv files each row of shape *[link, tweet, label1, label2, label3]*  
-	with labels ranging from 0:7
+	with labels ranging from 1:8 for ['Happy','Love','Hopeful','Neutral','Angry','Hopeless','Hate','Sad']
     * then to train a *session*  
         run *Classifier.py* as a script  
 3. or folder *Sessions/DefaultSession* having a *checkpoint* of a trained *session*
