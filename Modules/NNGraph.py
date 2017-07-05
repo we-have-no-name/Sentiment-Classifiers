@@ -30,15 +30,18 @@ class NNGraph():
 		if self.use_default_network: self.default_network()
 		self.set_graph_description()
 
-	def receive_inputs(self, internal_embedding=True, embedding2_dim=12, drop_out=None, multi_class_targets=True):
+	def receive_inputs(self, internal_embedding=True, embedding2_dim=None, drop_out=None, multi_class_targets=True):
 		'''
 		Add the first layer that receives inputs from the outside
 		internal_embedding: receive word keys instead of embeddings and collect the embeddings from the graph's internal word embedding
-		embedding2_dim: (only with internal_embedding) the dimensionality of the second embedding for each word
+		embedding2_dim: (only with internal_embedding) the dimensionality of the second embedding for each word [default: classes*1.5]
 		drop_out: the drop_out applied to the inputs. (use_drop_out must be set True by the session)
 		multi_class_targets: receive probabilies of each target class instead of the index of one top class
 		'''
 		self.internal_embedding = internal_embedding
+		if not internal_embedding and embedding2_dim is not None:
+			raise ValueError("'embedding2_dim' is not None, can't use dual embedding with external embedding")
+		if embedding2_dim is None and internal_embedding: embedding2_dim = int(self.classes * 1.5)
 		self.dual_embedding = (embedding2_dim > 0) and self.internal_embedding
 		self.embedding2_dim = embedding2_dim
 		self.inputs_drop_out = drop_out
