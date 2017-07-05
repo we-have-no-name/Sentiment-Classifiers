@@ -96,12 +96,14 @@ class TwitterAgent():
 	
 	def make_stream_object(self, file_name,**kwargs):
 		"""initializes a stream and its data handlers."""
-		lang=kwargs.get('lang','')
-		add_timestamp=kwargs.get('add_timestamp',True)
-		max_tweets=kwargs.get('max_tweets',[20])
-		save_to_files=kwargs.get('save_to_files',True)
-		data_handler=kwargs.get('data_handler',None)
-		data_list=kwargs.get('data_list',None)
+		lang=kwargs.pop('lang','')
+		add_timestamp=kwargs.pop('add_timestamp',True)
+		max_tweets=kwargs.pop('max_tweets',[20])
+		save_to_files=kwargs.pop('save_to_files',True)
+		data_handler=kwargs.pop('data_handler',None)
+		data_list=kwargs.pop('data_list',None)
+		if kwargs:
+			raise TypeError("'{}' is an invalid keyword argument for this function".format(next(iter(kwargs))))
 
 		storage_agent=None
 		if save_to_files:
@@ -137,13 +139,15 @@ class TwitterAgent():
 		optionally pass a data_handler object with method put(data)
 		to stop the stream at any time set max_tweets[0]=0
 		"""
-		file_name=kwargs.get('file_name', 'sample_stream_data')
-		lang=kwargs.get('lang','en')
-		add_timestamp=kwargs.get('add_timestamp',True)
-		max_tweets=kwargs.get('max_tweets',[20])
-		save_to_files=kwargs.get('save_to_files',True)
-		data_handler=kwargs.get('data_handler',None)
-		data_list=kwargs.get('data_list',None)
+		file_name=kwargs.pop('file_name', 'sample_stream_data')
+		lang=kwargs.pop('lang','en')
+		add_timestamp=kwargs.pop('add_timestamp',True)
+		max_tweets=kwargs.pop('max_tweets',[20])
+		save_to_files=kwargs.pop('save_to_files',True)
+		data_handler=kwargs.pop('data_handler',None)
+		data_list=kwargs.pop('data_list',None)
+		if kwargs:
+			raise TypeError("'{}' is an invalid keyword argument for this function".format(next(iter(kwargs))))
 		stream = self.make_stream_object(file_name, lang=lang, add_timestamp=add_timestamp, max_tweets=max_tweets, save_to_files=save_to_files, data_handler=data_handler, data_list=data_list)
 		stream.sample()
 		return data_list		
@@ -157,13 +161,15 @@ class TwitterAgent():
 		Spaces are ANDs, commas are ORs
 		pass a data list to append stream data to
 		"""		
-		file_name=kwargs.get('file_name','stream_data')
-		lang=kwargs.get('lang','en')
-		add_timestamp=kwargs.get('add_timestamp',True)
-		max_tweets=kwargs.get('max_tweets',[20])
-		save_to_files=kwargs.get('save_to_files',True)
-		data_handler=kwargs.get('data_handler',None)
-		data_list=kwargs.get('data_list',None)
+		file_name=kwargs.pop('file_name','stream_data')
+		lang=kwargs.pop('lang','en')
+		add_timestamp=kwargs.pop('add_timestamp',True)
+		max_tweets=kwargs.pop('max_tweets',[20])
+		save_to_files=kwargs.pop('save_to_files',True)
+		data_handler=kwargs.pop('data_handler',None)
+		data_list=kwargs.pop('data_list',None)
+		if kwargs:
+			raise TypeError("'{}' is an invalid keyword argument for this function".format(next(iter(kwargs))))
 		stream = self.make_stream_object(file_name, lang=lang, add_timestamp=add_timestamp, max_tweets=max_tweets, save_to_files=save_to_files, data_handler=data_handler, data_list=data_list)
 		stream.filter(track=keywords)
 		return data_list

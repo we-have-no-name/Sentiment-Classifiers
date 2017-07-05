@@ -112,10 +112,9 @@ class TweetToWordIndices():
 
 	def tweets_to_word_indices(self, tweets):
 		'''Returns a 2D array of the word indices in each tweet'''
-		tweets_indices_list = []
-		for tweet in tweets:
-			tweets_indices_list.append(self.tweet_to_word_indices(tweet))
-		tweets_indices = np.array(tweets_indices_list)
+		tweets_indices = np.zeros((len(tweets), self.assumed_max_length))
+		for i in range(len(tweets)):
+			tweets_indices[i] = self.tweet_to_word_indices(tweets[i])
 		return tweets_indices
 	
 	def get_match_statistics(self, tweets, tweets_indices):

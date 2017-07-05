@@ -63,8 +63,8 @@ class DataSetReader():
 		dir_contents = os.listdir(folder_path)
 		for name in dir_contents:
 			if name[-4:]=='.csv': self.read_file(os.path.join(folder_path, name), create_arrays=False)
-		self.tweets_to_indices()
 		self.sentiment_lists_to_arrays(shuffle_seed)
+		self.tweets_to_indices()
 		return True
 
 	def sentiment_lists_to_arrays(self, shuffle_seed=0):

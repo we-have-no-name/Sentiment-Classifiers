@@ -22,7 +22,11 @@ class Classifier:
 		trace_run: trace runtime statistics such [CPU, memory usage etc] and graph visualization
 			can be viewed using TensorBoard
 		'''
-		self.trace_run = kwargs.get('trace_run', False)
+		self.trace_run = kwargs.pop('trace_run', False)
+		if kwargs.pop('set_note', False)==True: self.accuracy_analysis.set_note()
+		if kwargs:
+			raise TypeError("'{}' is an invalid keyword argument for this function".format(next(iter(kwargs))))
+		
 		try:
 			json_config_file = open(user_config_filename)
 		except FileNotFoundError:
@@ -51,8 +55,6 @@ class Classifier:
 							  graph_description = self.graph.description)
 
 		self.text_indexer = TweetToWordIndices(track_words=False)
-		
-		if kwargs.get('set_note', False)==True: self.accuracy_analysis.set_note()
 		
 	def set_config_file(self, user_config_filename):
 		'''
@@ -101,8 +103,10 @@ class Classifier:
 		print_stats: print training statistics
 		checkpoint_distance: distance between each test iteration
 		'''
-		print_stats = kwargs.get('print_stats', False)
-		checkpoint_distance = kwargs.get('checkpoint_distance', 5)
+		print_stats = kwargs.pop('print_stats', False)
+		checkpoint_distance = kwargs.pop('checkpoint_distance', 5)
+		if kwargs:
+			raise TypeError("'{}' is an invalid keyword argument for this function".format(next(iter(kwargs))))
 		
 		if(data_set!=None): self.data_set=data_set
 		inputs_keys = self.data_set.tweets_indices
@@ -124,20 +128,20 @@ class Classifier:
 			for train in range(int(max_train/batch_size)):
 				batch_start = train*batch_size; batch_end = (train+1)*batch_size
 				if (train+2)*batch_size>max_train: batch_end=max_train
-##				np_inputs = inputs_embedded[batch_start:batch_end, :self.graph.num_steps]
-				np_inputs_keys = inputs_keys[batch_start:batch_end, :self.graph.num_steps]
-				np_targets = targets[batch_start:batch_end]
+##				inputs_batch = inputs_embedded[batch_start:batch_end, :self.graph.num_steps]
+				inputs_keys_batch = inputs_keys[batch_start:batch_end, :self.graph.num_steps]
+				targets_batch = targets[batch_start:batch_end]
 				
 				fetches = [self.graph.opt_op, self.graph.probs]
-##				feed_dict = {self.graph.inputs: np_inputs, self.graph.targets_mc: np_targets, self.graph.use_drop_out: True}
-				feed_dict = {self.graph.inputs_keys: np_inputs_keys, self.graph.targets_mc: np_targets, self.graph.use_drop_out: True}
+##				feed_dict = {self.graph.inputs: inputs_batch, self.graph.targets_mc: targets_batch, self.graph.use_drop_out: True}
+				feed_dict = {self.graph.inputs_keys: inputs_keys_batch, self.graph.targets_mc: targets_batch, self.graph.use_drop_out: True}
 				if checkpoint is not None:
 					trace = True if self.trace_run and self.accuracy_analysis.train_iters==0 and train==0 else None
 					options = trace and self.run_options
 					metadata = trace and self.run_metadata
 					
-					_, np_probs = self.sess.run(fetches, feed_dict, options, metadata)
-					iter_train_probs[batch_start:batch_end] = np_probs
+					_, probs_batch = self.sess.run(fetches, feed_dict, options, metadata)
+					iter_train_probs[batch_start:batch_end] = probs_batch
 
 					if trace:
 						self.train_writer.add_run_metadata(self.run_metadata, "step %d" % self.accuracy_analysis.train_iters)
@@ -150,20 +154,23 @@ class Classifier:
 			if checkpoint is None: continue
 
 			# Get test results
-##			np_test_inputs = inputs_embedded[max_train:: max_train+max_test, :self.graph.num_steps]
-			np_test_inputs_keys = inputs_keys[max_train: max_train+max_test, :self.graph.num_steps]
-			np_test_targets = targets[max_train: max_train+max_test]
-##			feed_dict = {self.graph.inputs:  np_test_inputs}
-			feed_dict = {self.graph.inputs_keys:  np_test_inputs_keys}
+##			test_inputs = inputs_embedded[max_train:: max_train+max_test, :self.graph.num_steps]
+			test_inputs_keys = inputs_keys[max_train: max_train+max_test, :self.graph.num_steps]
+##			test_targets = targets[max_train: max_train+max_test]
+##			feed_dict = {self.graph.inputs:  test_inputs}
+			feed_dict = {self.graph.inputs_keys:  test_inputs_keys}
 			iter_test_probs, = self.sess.run([self.graph.probs], feed_dict)
 
 			end_time = time.time()
 			eta = (end_time - start_time)*(iters-i-1)/(i+1)
 			self.accuracy_analysis.train_time = train_time0 + end_time-start_time
+			
 			if self.graph.description.get('merge', dict()).get('train_ratio', False):
 				merge_ratio, = self.sess.run([self.graph.merge_ratio_variable]); merge_ratio=float(merge_ratio)
 				self.graph.description['merge']['ratio'] = self.graph.merge_ratio = merge_ratio
+				
 			self.test_acc, self.max_test_acc = self.accuracy_analysis.add_probs(iter_train_probs, iter_test_probs)
+			
 			if print_stats: print('{}\nETA {}\n'.format(self.accuracy_analysis.statistics, self.accuracy_analysis.sec2clock(eta)))
 			
 		return self.test_acc, self.max_test_acc

@@ -20,10 +20,12 @@ class NNGraph():
 		self.graph = tf.Graph()
 		self.batch_size = batch_size
 		self.num_steps = num_steps
-		self.vocab_size = kwargs.get('vocab_size', int(1.2e6))
-		self.embedding_dim = kwargs.get('embedding_dim', 200)
-		self.classes = kwargs.get('classes', 8)
-		self.name = kwargs.get('name', None)
+		self.vocab_size = kwargs.pop('vocab_size', int(1.2e6))
+		self.embedding_dim = kwargs.pop('embedding_dim', 200)
+		self.classes = kwargs.pop('classes', 8)
+		self.name = kwargs.pop('name', None)
+		if kwargs:
+			raise TypeError("'{}' is an invalid keyword argument for this function".format(next(iter(kwargs))))
 		self.use_default_network = use_default_network
 		if self.use_default_network: self.default_network()
 		self.set_graph_description()
@@ -86,6 +88,7 @@ class NNGraph():
 		
 		if act_name == 'tanh': act = tf.tanh
 		elif act_name == 'relu': act = tf.nn.tanh
+		else: raise ValueError('undefined act_name')
 		if self.dual_embedding and dual_embedding: inputs_d = self.inputs_de_d
 		else: inputs_d = self.inputs_d
 		with self.graph.as_default(), tf.name_scope('rnn'):
@@ -93,6 +96,7 @@ class NNGraph():
 				self.cell = rnn.BasicLSTMCell(num_units, activation=act)
 			elif cell_type == 'gru':
 				self.cell = rnn.GRUCell(num_units, activation=act)
+			else: raise ValueError('undefined cell_type')
 			if self.rnn_drop_outs is not None:
 				self.cell = rnn.DropoutWrapper(self.cell, 1-self.rnn_drop_outs[0], 1-self.rnn_drop_outs[1])
 			if num_layers>1:
@@ -119,9 +123,11 @@ class NNGraph():
 		use None to skip a layer
 		dual_embedding: use dual embedding from inputs
 		'''
-		self.conv_params = kwargs.get('conv_params', [[[100, 1], [100, 2], [50, 7]], [[self.embedding_dim, 2]]])
-		self.pool_params = kwargs.get('pool_params', [[6, 3], [6, 2]])
-		self.cnn_dropout_params = kwargs.get('dropout_params', None)
+		self.conv_params = kwargs.pop('conv_params', [[[100, 1], [100, 2], [50, 7]], [[self.embedding_dim, 2]]])
+		self.pool_params = kwargs.pop('pool_params', [[6, 3], [6, 2]])
+		self.cnn_dropout_params = kwargs.pop('dropout_params', None)
+		if kwargs:
+			raise TypeError("'{}' is an invalid keyword argument for this function".format(next(iter(kwargs))))
 		self.cnn_dual_embedding = dual_embedding
 		
 		if self.dual_embedding and dual_embedding: inputs_d = self.inputs_de_d
@@ -232,9 +238,9 @@ class NNGraph():
 				self.losses=tf.reduce_sum(tf.square(tf.nn.relu(tf.subtract(self.targets_mc, self.probs))))
 			elif loss_name == 'mse_r':
 				self.losses=tf.reduce_mean(tf.square(tf.nn.relu(tf.subtract(self.targets_mc, self.probs))))
-			else:
-				loss_name = 'mse'
+			elif loss_name == 'mse':
 				self.losses=tf.reduce_mean(tf.square(tf.subtract(self.targets_mc, self.probs)))
+			else: raise ValueError('undefined loss_name')
 			self.loss_name = loss_name
 			self.opt = tf.train.AdamOptimizer()
 			self.opt_name = 'adam'
