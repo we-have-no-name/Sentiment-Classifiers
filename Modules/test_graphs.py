@@ -15,13 +15,13 @@ def init():
 
 	## Graph experiments
 	
-##	graph.rnn(cell_type = 'gru')
+##	graph.rnn(cell_type = 'lstm')
 ##	graph.cnn()
-##	graph.merge_rnn_cnn(ratio=0.75, train_ratio=False)
+##	graph.merge_rnn_cnn(ratio=0.75)
 
-	graph.rnn(act_name='relu')
-	graph.cnn(conv_params=[[[30, 2]], [[16,2]]], pool_params=[[32,1],[8,1]], dropout_params=[[None,0.3],None,0.5], dual_embedding=False)
-	graph.merge_rnn_cnn(ratio=0.75, train_ratio=False)
+##	graph.rnn(act_name='relu')
+##	graph.cnn(conv_params=[[[30, 2]], [[16,2]]], pool_params=[[32,1],[8,1]], dropout_params=[[None,0.3],None,0.5], dual_embedding=False)
+##	graph.merge_rnn_cnn(ratio=0.75)
 	
 	
 	

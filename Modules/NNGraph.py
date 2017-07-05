@@ -1,5 +1,7 @@
 import tensorflow as tf
 from tensorflow.contrib import rnn
+import tensorflow as tf
+from tensorflow.contrib import rnn
 
 class NNGraph():
 	'''
@@ -42,7 +44,7 @@ class NNGraph():
 		if not internal_embedding and embedding2_dim is not None:
 			raise ValueError("'embedding2_dim' is not None, can't use dual embedding with external embedding")
 		if embedding2_dim is None and internal_embedding: embedding2_dim = int(self.classes * 1.5)
-		self.dual_embedding = (embedding2_dim > 0) and self.internal_embedding
+		self.dual_embedding = embedding2_dim is not None and (embedding2_dim > 0)
 		self.embedding2_dim = embedding2_dim
 		self.inputs_drop_out = drop_out
 		self.multi_class_targets = multi_class_targets
@@ -60,13 +62,14 @@ class NNGraph():
 				self.embedding2 = tf.Variable(tf.random_uniform((self.vocab_size, self.embedding2_dim), 0.0001, 0.001))
 				self.inputs_e2 = tf.gather(self.embedding2, self.inputs_keys)
 				self.inputs_de = tf.concat((self.inputs, self.inputs_e2), axis=2)
-			else: self.inputs_de = self.inputs
 			if drop_out is not None:
 				self.inputs_d = tf.cond(self.use_drop_out, lambda:tf.nn.dropout(self.inputs, 1-self.inputs_drop_out), lambda: self.inputs)
-				self.inputs_de_d = tf.cond(self.use_drop_out, lambda:tf.nn.dropout(self.inputs_de, 1-self.inputs_drop_out), lambda: self.inputs_de)
+				if self.dual_embedding:
+					self.inputs_de_d = tf.cond(self.use_drop_out, lambda:tf.nn.dropout(self.inputs_de, 1-self.inputs_drop_out), lambda: self.inputs_de)
 			else:
 				self.inputs_d = self.inputs
-				self.inputs_de_d = self.inputs_de
+				if self.dual_embedding:
+					self.inputs_de_d = self.inputs_de
 			if self.multi_class_targets:
 				self.targets_mc =  tf.placeholder(tf.float32, (self.batch_size, self.classes))
 			else:
@@ -74,25 +77,29 @@ class NNGraph():
 				self.targets_oh = tf.one_hot(self.targets, self.classes, on_value=1, off_value=0)
 		self.set_graph_description()
 
-	def rnn(self, num_units=200, num_layers=1, drop_outs = None, cell_type='gru', dual_embedding=False, act_name='tanh'):
+	def rnn(self, num_units=200, num_layers=1, drop_outs = None, cell_type='gru', dual_embedding=None, act_name='tanh'):
 		'''
 		Build a multi layer RNN
 		drop_outs: list [input_drop_out, output_drop_out]. (use_drop_out must be set True by the session)
 		cell_type: 'gru' or 'lstm'
 		act: activation function for the rnn cell, None: default (tanh)
-		dual_embedding: use dual embedding from inputs
+		dual_embedding: use dual embedding from inputs [default: False if inputs have dual embedding]
 		'''
 		self.rnn_num_units = num_units
 		self.rnn_num_layers = num_layers
 		self.rnn_drop_outs = drop_outs
 		self.rnn_cell_type = cell_type
+		if not self.dual_embedding and dual_embedding is True:
+			raise ValueError("can't enable 'dual_embedding', inputs don't have a dual embedding")
+		if self.dual_embedding and dual_embedding is None:
+			dual_embedding = False
 		self.rnn_dual_embedding = dual_embedding
 		self.rnn_act_name = act_name
 		
 		if act_name == 'tanh': act = tf.tanh
 		elif act_name == 'relu': act = tf.nn.tanh
 		else: raise ValueError('undefined act_name')
-		if self.dual_embedding and dual_embedding: inputs_d = self.inputs_de_d
+		if dual_embedding: inputs_d = self.inputs_de_d
 		else: inputs_d = self.inputs_d
 		with self.graph.as_default(), tf.name_scope('rnn'):
 			if cell_type == 'lstm':
@@ -114,7 +121,7 @@ class NNGraph():
 			self.rnn_probs = self.probs = tf.nn.softmax(self.rnn_logits)
 		self.set_graph_description()
 		
-	def cnn(self, concat_axis=2, dual_embedding=True, **kwargs):
+	def cnn(self, concat_axis=2, dual_embedding=None, **kwargs):
 		'''
 		Build a multi layer, multi filter CNN
 		conv_params: 3D list of shape [layers, filters, filter_params]
@@ -124,16 +131,20 @@ class NNGraph():
 		dropout_params: list [[conv1_drop_out, pool1_drop_out], ..., flat_drop_out, dense_drop_out]
 			(use_drop_out must be set True by the session)
 		use None to skip a layer
-		dual_embedding: use dual embedding from inputs
+		dual_embedding: use dual embedding from inputs [default: True if inputs have dual embedding]
 		'''
 		self.conv_params = kwargs.pop('conv_params', [[[100, 1], [100, 2], [50, 7]], [[self.embedding_dim, 2]]])
 		self.pool_params = kwargs.pop('pool_params', [[6, 3], [6, 2]])
 		self.cnn_dropout_params = kwargs.pop('dropout_params', None)
 		if kwargs:
 			raise TypeError("'{}' is an invalid keyword argument for this function".format(next(iter(kwargs))))
+		if not self.dual_embedding and dual_embedding is True:
+			raise ValueError("can't enable 'dual_embedding', inputs don't have a dual embedding")
+		if self.dual_embedding and dual_embedding is None:
+			dual_embedding = True
 		self.cnn_dual_embedding = dual_embedding
 		
-		if self.dual_embedding and dual_embedding: inputs_d = self.inputs_de_d
+		if dual_embedding: inputs_d = self.inputs_de_d
 		else: inputs_d = self.inputs_d
 		
 		with self.graph.as_default(), tf.name_scope('cnn'):
@@ -344,4 +355,5 @@ class NNGraph():
 			description['training'] = training
 		
 		self.description = description
+
 
