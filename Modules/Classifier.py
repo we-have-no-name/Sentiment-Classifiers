@@ -5,7 +5,7 @@ from AccuracyAnalysis import AccuracyAnalysis
 import tensorflow as tf
 import numpy as np
 import os, time
-import json
+import json, pickle
 
 class Classifier:
 	'''
@@ -39,6 +39,10 @@ class Classifier:
 		if graph != None: self.graph = graph
 		else: self.graph = NNGraph(use_default_network = True)
 		self.graph_description = self.graph.description
+		if not self.graph.internal_embedding:
+			with open(os.path.join(self.data_path, "d" + str(self.graph.embedding_dim) +"_word_embedding", "word_embeddings_ndarray.pickle"), 'rb') as word_embedding_file:
+				self.word_embedding = pickle.load(word_embedding_file)
+		
 		if data_set==None: data_set = DataSetReader()
 		self.data_set = data_set
 		self.num_steps = self.graph.num_steps
@@ -76,7 +80,8 @@ class Classifier:
 		Initializes a TensorFlow session
 		'''
 		self.sess.run(self.graph.global_variables_initializer)
-		self.graph.embedding_saver.restore(self.sess, os.path.join(self.data_path, "d"+ str(self.graph.embedding_dim) + "_word_embedding", "TF_Variables", "Embedding"))
+		if self.graph.internal_embedding:
+			self.graph.embedding_saver.restore(self.sess, os.path.join(self.data_path, "d"+ str(self.graph.embedding_dim) + "_word_embedding", "TF_Variables", "Embedding"))
 		if self.trace_run: self.init_train_writer()
 		return True
 
@@ -110,6 +115,8 @@ class Classifier:
 		
 		if(data_set!=None): self.data_set=data_set
 		inputs_keys = self.data_set.tweets_indices
+		if not self.graph.internal_embedding:
+			inputs_embedded = self.word_embedding[inputs_keys]
 		targets = self.data_set.sents_sc_np
 		inputs_count = len(inputs_keys)
 		if max_train is None: max_train=int(inputs_count*0.8)
@@ -128,13 +135,15 @@ class Classifier:
 			for train in range(int(max_train/batch_size)):
 				batch_start = train*batch_size; batch_end = (train+1)*batch_size
 				if (train+2)*batch_size>max_train: batch_end=max_train
-##				inputs_batch = inputs_embedded[batch_start:batch_end, :self.graph.num_steps]
-				inputs_keys_batch = inputs_keys[batch_start:batch_end, :self.graph.num_steps]
 				targets_batch = targets[batch_start:batch_end]
-				
+				if not self.graph.internal_embedding:
+					inputs_embedded_batch = inputs_embedded[batch_start:batch_end, :self.graph.num_steps]
+					feed_dict = {self.graph.inputs: inputs_embedded_batch, self.graph.targets_mc: targets_batch, self.graph.use_drop_out: True}
+				else:
+					inputs_keys_batch = inputs_keys[batch_start:batch_end, :self.graph.num_steps]
+					feed_dict = {self.graph.inputs_keys: inputs_keys_batch, self.graph.targets_mc: targets_batch, self.graph.use_drop_out: True}
 				fetches = [self.graph.opt_op, self.graph.probs]
-##				feed_dict = {self.graph.inputs: inputs_batch, self.graph.targets_mc: targets_batch, self.graph.use_drop_out: True}
-				feed_dict = {self.graph.inputs_keys: inputs_keys_batch, self.graph.targets_mc: targets_batch, self.graph.use_drop_out: True}
+				
 				if checkpoint is not None:
 					trace = True if self.trace_run and self.accuracy_analysis.train_iters==0 and train==0 else None
 					options = trace and self.run_options
@@ -154,11 +163,13 @@ class Classifier:
 			if checkpoint is None: continue
 
 			# Get test results
-##			test_inputs = inputs_embedded[max_train:: max_train+max_test, :self.graph.num_steps]
-			test_inputs_keys = inputs_keys[max_train: max_train+max_test, :self.graph.num_steps]
 ##			test_targets = targets[max_train: max_train+max_test]
-##			feed_dict = {self.graph.inputs:  test_inputs}
-			feed_dict = {self.graph.inputs_keys:  test_inputs_keys}
+			if not self.graph.internal_embedding:
+				test_inputs_embedded = inputs_embedded[max_train: max_train+max_test, :self.graph.num_steps]
+				feed_dict = {self.graph.inputs:  test_inputs_embedded}
+			else:
+				test_inputs_keys = inputs_keys[max_train: max_train+max_test, :self.graph.num_steps]
+				feed_dict = {self.graph.inputs_keys:  test_inputs_keys}
 			iter_test_probs, = self.sess.run([self.graph.probs], feed_dict)
 
 			end_time = time.time()
@@ -204,13 +215,16 @@ class Classifier:
 		Predicts the class probabilities for each input
 		inputs: list of strings to classify
 		'''
-		inputs_keys = np.zeros((len(inputs), self.text_indexer.assumed_max_length))
+		inputs_keys = np.zeros((len(inputs), self.text_indexer.assumed_max_length), dtype=np.int32)
 		for i in range(len(inputs)):
 			inputs_keys[i] = self.text_indexer.tweet_to_word_indices(inputs[i])
-##		np_inputs = inputs[:, :self.graph.num_steps]
-		np_inputs_keys = inputs_keys[:, :self.graph.num_steps]
-##		output_probs, = self.sess.run([self.graph.probs], feed_dict={self.graph.inputs: inputs})
-		output_probs, = self.sess.run([self.graph.probs], feed_dict={self.graph.inputs_keys: np_inputs_keys})
+		inputs_keys = inputs_keys[:, :self.graph.num_steps]
+		if not self.graph.internal_embedding:
+			inputs_embedded = self.word_embedding[inputs_keys]
+			feed_dict={self.graph.inputs: inputs_embedded}
+		else:
+			feed_dict={self.graph.inputs_keys: inputs_keys}
+		output_probs, = self.sess.run([self.graph.probs], feed_dict)
 		return output_probs
 
 def main(graph = None, iters = 100):

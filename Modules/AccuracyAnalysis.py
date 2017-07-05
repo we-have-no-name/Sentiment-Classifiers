@@ -197,12 +197,12 @@ class AccuracyAnalysis:
 		Update the statistics of the data set
 		'''
 		self.update_dataset_baselines()
-		classes = 'Distribution:\n\tSize: {}, max length: {}\n\tClass counts: {}\n\tTweets with multiple feelings: {} ({:.3}%)'.format(
-			self.data_set.size, self.data_set.max_length, self.data_set.class_counts, self.data_set.multiclass_count, self.data_set.multiclass_ratio*100)
+		classes = 'Distribution:\n\tSize: {}\n\tmax input length: {}\n\tTrain patterns: {}\tTest patters: {}\n\tClass counts: {}\n\tTweets with multiple feelings: {} ({:.3}%)'.format(
+			self.data_set.size, self.data_set.max_length, self.max_train, self.max_test, self.data_set.class_counts, self.data_set.multiclass_count, self.data_set.multiclass_ratio*100)
 		baselines = 'Baselines:\n\tData-set baseline: {:.3}\n\tTop-3-outputs-include-target baseline: {:.3}, baseline0: {:.3}'.format(
 			self.data_set_baseline, self.top_3_baseline, self.top_3_baseline0)
-		unmatched_words = '\n'.join(['{}: {}'.format(item[0], item[1]) for item in self.data_set.unmatched_words_counts])
-		matching = 'Word matching:\n\tMatch ratio: {:.5}\n\tTotal Unmatched words: {}\nUnmatched words:\n{}'.format(
+		unmatched_words = '\n'.join(['\t\t{}: {}'.format(item[0], item[1]) for item in self.data_set.unmatched_words_counts])
+		matching = 'Word matching:\n\tMatch ratio: {:.5}\n\tTotal Unmatched words: {}\n\tUnmatched words:\n{}'.format(
 			self.data_set.match_ratio, self.data_set.unmatched_words_count, unmatched_words)
 		self.data_set_statistics = '\n\n'.join([classes, baselines, matching])
 

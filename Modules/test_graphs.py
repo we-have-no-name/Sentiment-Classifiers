@@ -38,7 +38,7 @@ def train(iters):
 	classifier.train(iters, print_stats=True)
 	save = input("Save session? (y, n) [y]:")
 	if save == '' or save == 'y':
-		c.save_session()
+		classifier.save_session()
 		print("Session saved")
 	print("Done")
 

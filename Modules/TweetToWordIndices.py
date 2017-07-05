@@ -96,7 +96,7 @@ class TweetToWordIndices():
 
 	def words_to_indices(self, words):
 		'''Gets the index of each word from the embedding dictionary'''
-		word_indices=np.array([self.vocab_size-2 for _ in range(self.assumed_max_length)])
+		word_indices=np.array([self.vocab_size-2 for _ in range(self.assumed_max_length)], dtype=np.int32)
 		for i in range(len(words)) :
 			word_indices[i] = self.word_dict2.get(words[i], self.vocab_size-1)
 			if self.track_words and word_indices[i] == (self.vocab_size-1):
@@ -112,7 +112,7 @@ class TweetToWordIndices():
 
 	def tweets_to_word_indices(self, tweets):
 		'''Returns a 2D array of the word indices in each tweet'''
-		tweets_indices = np.zeros((len(tweets), self.assumed_max_length))
+		tweets_indices = np.zeros((len(tweets), self.assumed_max_length), dtype=np.int32)
 		for i in range(len(tweets)):
 			tweets_indices[i] = self.tweet_to_word_indices(tweets[i])
 		return tweets_indices

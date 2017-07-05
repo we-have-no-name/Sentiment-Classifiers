@@ -39,7 +39,7 @@ class NNGraph():
 		multi_class_targets: receive probabilies of each target class instead of the index of one top class
 		'''
 		self.internal_embedding = internal_embedding
-		self.dual_embedding = embedding2_dim > 0
+		self.dual_embedding = (embedding2_dim > 0) and self.internal_embedding
 		self.embedding2_dim = embedding2_dim
 		self.inputs_drop_out = drop_out
 		self.multi_class_targets = multi_class_targets
@@ -51,13 +51,13 @@ class NNGraph():
 				self.embedding_saver = tf.train.Saver({'embedding': self.embedding})
 				self.inputs_keys = tf.placeholder(tf.int32, (self.batch_size, self.num_steps))
 				self.inputs = tf.gather(self.embedding, self.inputs_keys)
-				if self.dual_embedding:
-					self.embedding2 = tf.Variable(tf.random_uniform((self.vocab_size, self.embedding2_dim), 0.0001, 0.001))
-					self.inputs_e2 = tf.gather(self.embedding2, self.inputs_keys)
-					self.inputs_de = tf.concat((self.inputs, self.inputs_e2), axis=2)
-				else: self.inputs_de = self.inputs
 			else:
 				self.inputs = tf.placeholder(tf.float32, (self.batch_size, self.num_steps, self.embedding_dim))
+			if self.dual_embedding:
+				self.embedding2 = tf.Variable(tf.random_uniform((self.vocab_size, self.embedding2_dim), 0.0001, 0.001))
+				self.inputs_e2 = tf.gather(self.embedding2, self.inputs_keys)
+				self.inputs_de = tf.concat((self.inputs, self.inputs_e2), axis=2)
+			else: self.inputs_de = self.inputs
 			if drop_out is not None:
 				self.inputs_d = tf.cond(self.use_drop_out, lambda:tf.nn.dropout(self.inputs, 1-self.inputs_drop_out), lambda: self.inputs)
 				self.inputs_de_d = tf.cond(self.use_drop_out, lambda:tf.nn.dropout(self.inputs_de, 1-self.inputs_drop_out), lambda: self.inputs_de)
