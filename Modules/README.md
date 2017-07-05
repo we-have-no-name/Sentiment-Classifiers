@@ -40,5 +40,6 @@ the *data_path* folder should have the following
     * then to train a *session*  
         run *Classifier.py* as a script  
 3. or folder *Sessions/DefaultSession* having a *checkpoint* of a trained *session*
+
 ## Example of usage
 see example_usage.py
