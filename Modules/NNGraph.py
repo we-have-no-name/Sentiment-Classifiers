@@ -238,22 +238,32 @@ class NNGraph():
 			self.probs = self.merge_ratio_variable * self.rnn_probs + (1-self.merge_ratio_variable) * self.cnn_probs
 		self.set_graph_description()
 
-	def training(self, loss_name = 'sse_r'):
+	def training(self, loss_name = None):
 		'''
 		Add a loss function and an optimizer
 		args:
-		loss_name: name of the loss function. options: ('sse_r', 'mse_r', 'mse') ['sse_r']
+		loss_name: name of the loss function. options: ('sse_r', 'mse_r', 'mse')
+			{default: 'sse_r' if multi_class_targets else 'cross_entropy'}
 		'sse_r': sum of squares of RELUs error
 		'mse_r': mean of squares of RELUs error
 		'mse': mean of squares error
 		'''
+		if loss_name is None:
+			if self.multi_class_targets:
+				loss_name = 'sse_r'
+				targets = self.targets_mc
+			else:
+				loss_name = 'cross_entropy'
+				targets = tf.cast(self.targets_oh, tf.float32)
 		with self.graph.as_default(), tf.name_scope('training'):
 			if loss_name == 'sse_r':
-				self.losses=tf.reduce_sum(tf.square(tf.nn.relu(tf.subtract(self.targets_mc, self.probs))))
+				self.losses=tf.reduce_sum(tf.square(tf.nn.relu(tf.subtract(targets, self.probs))))
 			elif loss_name == 'mse_r':
-				self.losses=tf.reduce_mean(tf.square(tf.nn.relu(tf.subtract(self.targets_mc, self.probs))))
+				self.losses=tf.reduce_mean(tf.square(tf.nn.relu(tf.subtract(targets, self.probs))))
 			elif loss_name == 'mse':
-				self.losses=tf.reduce_mean(tf.square(tf.subtract(self.targets_mc, self.probs)))
+				self.losses=tf.reduce_mean(tf.square(tf.subtract(targets, self.probs)))
+			elif loss_name == 'cross_entropy':
+				self.losses=-tf.reduce_sum(targets * tf.log(tf.clip_by_value(self.probs, 1e-10, 1.0)))
 			else: raise ValueError('undefined loss_name')
 			self.loss_name = loss_name
 			self.opt = tf.train.AdamOptimizer()

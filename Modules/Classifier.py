@@ -42,6 +42,8 @@ class Classifier:
 		if not self.graph.internal_embedding:
 			with open(os.path.join(self.data_path, "d" + str(self.graph.embedding_dim) +"_word_embedding", "word_embeddings_ndarray.pickle"), 'rb') as word_embedding_file:
 				self.word_embedding = pickle.load(word_embedding_file)
+			self.inputs_node = self.graph.inputs
+		else: self.inputs_node = self.graph.inputs_keys
 		
 		if data_set==None: data_set = DataSetReader()
 		self.data_set = data_set
@@ -115,17 +117,23 @@ class Classifier:
 		
 		if(data_set!=None): self.data_set=data_set
 		inputs_keys = self.data_set.tweets_indices
-		if not self.graph.internal_embedding:
-			inputs_embedded = self.word_embedding[inputs_keys]
-		targets = self.data_set.sents_sc_np
-		inputs_count = len(inputs_keys)
+		if not self.graph.internal_embedding: inputs = self.word_embedding[inputs_keys]
+		else: inputs = inputs_keys
+		
+		if not self.graph.multi_class_targets:
+			targets = self.data_set.sents_np
+			targets_node = self.graph.targets
+		else:
+			targets = self.data_set.sents_sc_np
+			targets_node = self.graph.targets_mc
+		
+		inputs_count = len(inputs)
 		if max_train is None: max_train=int(inputs_count*0.8)
 		if max_test is None: max_test=int(inputs_count*0.2)
 		
 		iter_train_probs = np.zeros((max_train, self.classes))
-		
 		train_time0 = self.accuracy_analysis.train_time
-		start_time = time.time();
+		start_time = time.time()
 		for i in range(iters):
 			checkpoint = None
 			if (i+1)%checkpoint_distance == 0: checkpoint = (i+1)//checkpoint_distance 
@@ -135,13 +143,10 @@ class Classifier:
 			for train in range(int(max_train/batch_size)):
 				batch_start = train*batch_size; batch_end = (train+1)*batch_size
 				if (train+2)*batch_size>max_train: batch_end=max_train
+				
+				inputs_batch = inputs[batch_start:batch_end, :self.graph.num_steps]
 				targets_batch = targets[batch_start:batch_end]
-				if not self.graph.internal_embedding:
-					inputs_embedded_batch = inputs_embedded[batch_start:batch_end, :self.graph.num_steps]
-					feed_dict = {self.graph.inputs: inputs_embedded_batch, self.graph.targets_mc: targets_batch, self.graph.use_drop_out: True}
-				else:
-					inputs_keys_batch = inputs_keys[batch_start:batch_end, :self.graph.num_steps]
-					feed_dict = {self.graph.inputs_keys: inputs_keys_batch, self.graph.targets_mc: targets_batch, self.graph.use_drop_out: True}
+				feed_dict = {self.inputs_node: inputs_batch, targets_node: targets_batch, self.graph.use_drop_out: True}
 				fetches = [self.graph.opt_op, self.graph.probs]
 				
 				if checkpoint is not None:
@@ -164,12 +169,8 @@ class Classifier:
 
 			# Get test results
 ##			test_targets = targets[max_train: max_train+max_test]
-			if not self.graph.internal_embedding:
-				test_inputs_embedded = inputs_embedded[max_train: max_train+max_test, :self.graph.num_steps]
-				feed_dict = {self.graph.inputs:  test_inputs_embedded}
-			else:
-				test_inputs_keys = inputs_keys[max_train: max_train+max_test, :self.graph.num_steps]
-				feed_dict = {self.graph.inputs_keys:  test_inputs_keys}
+			test_inputs = inputs[max_train: max_train+max_test, :self.graph.num_steps]
+			feed_dict = {self.inputs_node: test_inputs}
 			iter_test_probs, = self.sess.run([self.graph.probs], feed_dict)
 
 			end_time = time.time()
@@ -219,11 +220,9 @@ class Classifier:
 		for i in range(len(inputs)):
 			inputs_keys[i] = self.text_indexer.tweet_to_word_indices(inputs[i])
 		inputs_keys = inputs_keys[:, :self.graph.num_steps]
-		if not self.graph.internal_embedding:
-			inputs_embedded = self.word_embedding[inputs_keys]
-			feed_dict={self.graph.inputs: inputs_embedded}
-		else:
-			feed_dict={self.graph.inputs_keys: inputs_keys}
+		if not self.graph.internal_embedding: inputs = self.word_embedding[inputs_keys]
+		else: inputs = inputs_keys
+		feed_dict={self.inputs_node: inputs}
 		output_probs, = self.sess.run([self.graph.probs], feed_dict)
 		return output_probs
 
