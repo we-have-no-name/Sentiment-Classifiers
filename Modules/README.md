@@ -4,6 +4,11 @@ gets a stream of tweets and detects 8 sentiment classes in them in real time
 
 ## Requirements
 ### Python 3.5 with libraries
+install python 3.5 as your default version then run in your shell/cmd/terminal
+```
+pip3 install -r requirments.txt
+```
+this will install the follwoing libraries
 * tensorflow 1.0.1
 * numpy
 * tweepy
