@@ -49,7 +49,6 @@ import numpy as np
 ## used to avoid priting emoji in IDLE
 non_bmp_map = dict.fromkeys(range(0x10000, sys.maxunicode + 1), 0xfffd)
 
-classified = 0
 def main():
 	'''
 	Runs two threads, one to receive a tweets stream and another to classify them.

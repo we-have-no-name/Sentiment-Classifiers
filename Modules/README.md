@@ -3,7 +3,7 @@
 gets a stream of tweets and detects 8 sentiment classes in them in real time
 
 ## Requirements
-### Python 3 with libraries
+### Python 3.5 with libraries
 * tensorflow 1.0.1
 * numpy
 * tweepy
