@@ -70,7 +70,7 @@ class DataSetReader():
 	def sentiment_lists_to_arrays(self, shuffle_seed=0):
 		'''
 		Create numpy arrays from the sentiment lists
-			also updates the classes statitics
+			also updates the classes statistics
 		args:
 		shuffle_seed: the seed to be used to shuffle the tweets, Use None to skip shuffling
 		'''
@@ -145,7 +145,7 @@ class DataSetReader():
 
 	def tweets_to_indices(self):
 		'''converts the tweets list to a list of arrays of tweets indices
-			also updates the matching statitics
+			also updates the matching statistics
 		'''
 		self.size = len(self.tweets)
 		self.tweets_indices = self.text_indexer.tweets_to_word_indices(self.tweets)

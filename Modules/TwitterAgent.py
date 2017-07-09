@@ -71,8 +71,8 @@ class TwitterAgent():
 	TwitterAgent is a simple class that works as a wrapper for tweepy
 	for dealing with data from twitter and making your own dataset
 	functions:
-		make_stream_object : make a tweepy streemobject
-		get_sample_tweets_stream :  get realtime tweets
+		make_stream_object : make a tweepy stream object
+		get_sample_tweets_stream :  get real time tweets
 		get_tweets_stream_with_keywords : get a stream of tweets having the provided keywords (can have emojis)
 		search_for_tweets_with_keywords : search for tweets having the specified keyword(s) one keyword at a time (can't have emojis)
 		get_tweets_with_ids : get tweets object using their ids
@@ -92,7 +92,7 @@ class TwitterAgent():
 			self.auth.set_access_token(self.access_token, self.access_token_secret)
 			self.api = tweepy.API(self.auth)
 		except :
-			print("invaild data for auth")
+			print("invalid data for auth")
 	
 	def make_stream_object(self, file_name,**kwargs):
 		"""initializes a stream and its data handlers."""

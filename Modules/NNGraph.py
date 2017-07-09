@@ -38,7 +38,7 @@ class NNGraph():
 		internal_embedding: receive word keys instead of embeddings and collect the embeddings from the graph's internal word embedding
 		embedding2_dim: (only with internal_embedding) the dimensionality of the second embedding for each word [default: classes*1.5]
 		drop_out: the drop_out applied to the inputs. (use_drop_out must be set True by the session)
-		multi_class_targets: receive probabilies of each target class instead of the index of one top class
+		multi_class_targets: receive probabilities of each target class instead of the index of one top class
 		'''
 		self.internal_embedding = internal_embedding
 		if not internal_embedding and embedding2_dim is not None:
@@ -248,13 +248,12 @@ class NNGraph():
 		'mse_r': mean of squares of RELUs error
 		'mse': mean of squares error
 		'''
-		if loss_name is None:
-			if self.multi_class_targets:
-				loss_name = 'sse_r'
-				targets = self.targets_mc
-			else:
-				loss_name = 'cross_entropy'
-				targets = tf.cast(self.targets_oh, tf.float32)
+		if self.multi_class_targets:
+			if loss_name is None: loss_name = 'sse_r'
+			targets = self.targets_mc
+		else:
+			if loss_name is None: loss_name = 'cross_entropy'
+			targets = tf.cast(self.targets_oh, tf.float32)
 		with self.graph.as_default(), tf.name_scope('training'):
 			if loss_name == 'sse_r':
 				self.losses=tf.reduce_sum(tf.square(tf.nn.relu(tf.subtract(targets, self.probs))))

@@ -55,7 +55,7 @@ class TweetToWordIndices():
 		return json_config_file
 		
 	def unescape_html(self, txt):
-		'''Replaces HTML escape codes with their equivalent characteres'''
+		'''Replaces HTML escape codes with their equivalent characters'''
 		return html.unescape(txt)
 
 	def split_punctuations(self, txt):

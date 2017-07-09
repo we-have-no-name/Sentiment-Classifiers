@@ -24,7 +24,7 @@ a config.json file of shape
 	"access_token": "",
 	"access_token_secret": ""
 }
-having your preferred data folder in data_path and your twitter API access data they can be optained after creating an app in https://apps.twitter.com
+having your preferred data folder in data_path and your twitter API access data they can be obtained after creating an app in https://apps.twitter.com
 
 The Data folder:
 the data_path folder should have the following
@@ -46,7 +46,7 @@ from TwitterAgent import TwitterAgent
 import threading, time, sys
 import numpy as np
 
-## used to avoid priting emoji in IDLE
+## used to avoid printing emoji in IDLE
 non_bmp_map = dict.fromkeys(range(0x10000, sys.maxunicode + 1), 0xfffd)
 
 def main():
