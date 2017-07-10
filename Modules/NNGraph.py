@@ -259,6 +259,8 @@ class NNGraph():
 				self.losses=tf.reduce_sum(tf.square(tf.nn.relu(tf.subtract(targets, self.probs))))
 			elif loss_name == 'mse_r':
 				self.losses=tf.reduce_mean(tf.square(tf.nn.relu(tf.subtract(targets, self.probs))))
+			elif loss_name == 'sse':
+				self.losses=tf.reduce_sum(tf.square(tf.subtract(targets, self.probs)))
 			elif loss_name == 'mse':
 				self.losses=tf.reduce_mean(tf.square(tf.subtract(targets, self.probs)))
 			elif loss_name == 'cross_entropy':
