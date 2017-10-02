@@ -6,7 +6,7 @@ gets a stream of tweets and detects 8 sentiment classes in them in real time
 ### Python 3.5 with libraries
 install python 3.5 as your default version then run in your shell/cmd/terminal
 ```
-pip install -r requirments.txt
+pip install -r requirements.txt
 ```
 this will install the follwoing libraries
 * tensorflow 1.0.1
